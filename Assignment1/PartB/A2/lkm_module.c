@@ -3,18 +3,66 @@
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
 
-#define READ_DATA _IOR('a','b',int32_t*)
+#define PB2_SET_TYPE _IOW(0x10, 0x31, int32_t*)
+#define PB2_INSERT _IOW(0x10, 0x32, int32_t*)
+#define PB2_GET_INFO _IOR(0x10, 0x33, int32_t*)
+#define PB2_EXTRACT _IOR(0x10, 0x34, int32_t*)
 
+
+static struct pb2_set_type_arguments{
+	int32_t​ heap_size; ​// size of the heap
+	int32_t​ heap_type; ​// heap type: 0 for min-heap, 1 for max-heap
+};
+
+static struct​ obj_info {
+	​int32_t​ heap_size; ​// size of the heap
+	​int32_t​ heap_type; ​// heap type: 0 for min-heap, 1 for max-heap
+	​int32_t​ root; ​// value of the root node of the heap (null if size is 0).
+	​int32_t​ last_inserted; ​// value of the last element inserted in the heap.
+};
+
+static struct​ result {
+	​int32_t​ result; ​// value of min/max element extracted.
+	​int32_t​ heap_size; ​// size of the heap after extracting.
+};
 
 static struct file_operations file_ops;
 static char buffer[256] = {0};
 static int buffer_len = 0;
 
+static int args_set = 0;
+
 
 static long ioctl(struct file *file, unsigned int cmd, unsigned long arg){
 	switch(cmd){
-		case READ_DATA:
-			copy_to_user((int*) arg, &buffer_len, sizeof(buffer_len));
+		case PB2_SET_TYPE:
+			struct pb2_set_type_arguments pb2_args;
+			copy_from_user(&pb2_args, (struct pb2_set_type_arguments) arg, sizeof(*pb2_args));
+
+			printk("%d", pb2_args.heap_type);
+
+			if (pb2_args.heap_type != 0 || pb2_args.heap_type != 1)
+				return -EINVAL;
+
+			args_set = 1;
+			break;
+
+		case PB2_INSERT:
+			if (args_set == 0)
+				return -EACCES;
+
+			break;
+
+		case PB2_GET_INFO:
+			if (args_set == 0)
+				return -EACCES;
+
+			break;
+
+		case PB2_EXTRACT:
+			if (args_set == 0)
+				return -EACCES;
+
 			break;
 
 		default:
