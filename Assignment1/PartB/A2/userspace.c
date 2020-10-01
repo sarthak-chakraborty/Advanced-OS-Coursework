@@ -27,11 +27,10 @@ int main(){
 		return 1;
 
 	struct pb2_set_type_arguments pb2_args;
-	pb2_args.heap_type = 0;
+	pb2_args.heap_type = 8;
 	pb2_args.heap_size = 4;
 
-	ioctl(fd, PB2_SET_TYPE, (struct pb2_set_type_arguments *) &pb2_args);
-	printf("Value is %d\n", value);
+	ioctl(fd, PB2_SET_TYPE, 2);
 
 	close(fd);
 
