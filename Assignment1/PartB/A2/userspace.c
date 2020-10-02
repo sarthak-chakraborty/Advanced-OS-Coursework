@@ -19,7 +19,7 @@ struct pb2_set_type_arguments{
 	int32_t heap_type;	// heap type: 0 for min-heap, 1 for max-heap
 };
 
-struct ob_info{
+struct obj_info{
 	int32_t heap_size;	// size of the heap
 	int32_t heap_type;	// heap type: 0 for min-heap, 1 for max-heap
 	int32_t root;	// value of the root node of the heap (null if size is 0)
@@ -53,15 +53,19 @@ int main(){
 	ret = ioctl(fd, PB2_INSERT, &num);
 	printf("%d\n", ret);
 
-	/*
-	struct obj_info *heap_info = (struct obj_info *)malloc(sizeof(struct ob_info));
-	ret = ioctl(fd, PB2_GET_INFO, (struct ob_info *) &heap_info);
+	
+	struct obj_info heap_info;
+	//int n;
+
+	ret = ioctl(fd, PB2_GET_INFO, (struct obj_info *) &heap_info);
 	if(ret == 0){
 		printf("HEAP INFO:\n");
-		printf("Heap Type: %d\n", heap_info->heap_type);
-		printf("Heap Size: %d\n", heap_info->heap_size);
+		printf("%d\n",ret);
+		printf("Heap Type: %d\n", heap_info.heap_type);
+		printf("Heap Size: %d\n", heap_info.heap_size);
+		//printf("%d\n",n);
 	}
-	*/
+	
 
 	close(fd);
 

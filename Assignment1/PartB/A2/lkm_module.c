@@ -43,17 +43,17 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg){
 		case PB2_SET_TYPE:
 			;
 			retval = copy_from_user(&pb2_args, (struct pb2_set_type_arguments *)arg, sizeof(pb2_args));
-
-
+			if(retval)
+				return -1;
+			
 			printk("HEAP TYPE: %d", pb2_args.heap_type);
 			printk("HEAP SIZE: %d", pb2_args.heap_size);
 			
 			
-			if (pb2_args.heap_type != 0 || pb2_args.heap_type != 1)
+			if (pb2_args.heap_type != 0 && pb2_args.heap_type != 1)
 				return -EINVAL;
 
 			args_set = 1;
-			return 0;
 			break;
 
 		case PB2_INSERT:
@@ -64,28 +64,25 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg){
 			
 			// If heap is full, return EACCESS
 			
-			retval = copy_from_user(&num, &arg, sizeof(int));
+			retval = copy_from_user(&num, (int *)arg, sizeof(int));
 
 			printk("num: %d\n", num);
 
-			return 0;
 			break;
 
 		case PB2_GET_INFO:
 			if (args_set == 0)
 				return -EACCES;
+			
+			heap.heap_type = pb2_args.heap_type;
+                        heap.heap_size = 10;
+                        heap.root = 1;
 
 			retval = copy_to_user((struct obj_info *)arg, &heap, sizeof(obj_info));
-			if(!retval){
-				heap.heap_type = pb2_args.heap_type;
-				heap.heap_size = 10;
-				heap.root = 1;
-
-				return 0;
-			}
-			else{
+			
+			if(retval)
 				return -1;
-			}
+
 			break;
 
 		case PB2_EXTRACT:
