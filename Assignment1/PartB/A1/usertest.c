@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize min heap =============================================
     printf("==== Initializing Min Heap ====\n");
-    int32_t buf[2];
+    char buf[2];
     // min heap
     buf[0] = 0xFF;
     // size of the heap
