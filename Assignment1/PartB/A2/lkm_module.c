@@ -3,6 +3,7 @@
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h> 
+#include <linux/mutex.h>
 #define DEVICE_NAME "partb_2_16CS30044"
 
 #define PB2_SET_TYPE _IOW(0x10, 0x31, int32_t*)
@@ -10,8 +11,9 @@
 #define PB2_GET_INFO _IOR(0x10, 0x33, int32_t*)
 #define PB2_EXTRACT _IOR(0x10, 0x34, int32_t*)
 
-MODULE_LICENSE("GPL");            
+MODULE_LICENSE("GPL");
 
+static DEFINE_MUTEX(heap_mutex);
 
 static struct pb2_set_type_arguments {
 	int32_t heap_size; // size of the heap
@@ -45,10 +47,9 @@ typedef struct Heap Heap;
 // static long initialize_user_heap();
 // static long insert_into_user_heap();
 // static long pop_from_user_heap();
-static Heap *CreateHeap(int32_t capacity, int32_t heap_type);
-static int32_t DestroyHeap(Heap* heap);
-static void insert(Heap *h, int32_t key);
-// static void print(Heap *h);
+static Heap* CreateHeap(int32_t capacity, int32_t heap_type);
+static Heap* DestroyHeap(Heap* heap);
+static int32_t insert(Heap *h, int32_t key);
 static void heapify_bottom_top(Heap *h, int32_t index);
 static void heapify_top_bottom(Heap *h, int32_t parent_node);
 static int32_t PopMin(Heap *h);
@@ -82,41 +83,48 @@ static struct file_operations file_ops =
 
 static Heap *CreateHeap(int32_t capacity, int32_t heap_type) {
 	// using void * kmalloc_array(size_t n, size_t size, gfp_t flags)
-	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_ATOMIC); //one is number of heap
+	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_KERNEL); //one is number of heap
 
 	//check if memory allocation is fails
 	if (h == NULL) {
-		printk(KERN_ALERT "Memory Error!");
+		printk(KERN_ALERT DEVICE_NAME "Memory Error!");
 		return NULL;
 	}
 	h->heap_type = heap_type;
 	h->count = 0;
 	h->capacity = capacity;
-	h->arr = (int32_t *) kmalloc_array(capacity, sizeof(int32_t), GFP_ATOMIC); //size in bytes
+	h->arr = (int32_t *) kmalloc_array(capacity, sizeof(int32_t), GFP_KERNEL); //size in bytes
+	h->heap_type = NULL;
 
 	//check if allocation succeed
 	if ( h->arr == NULL) {
-		printk(KERN_ALERT "Memory Error!");
+		printk(KERN_ALERT DEVICE_NAME "Memory Error!");
 		return NULL;
 	}
 	return h;
 }
 
-static int32_t DestroyHeap(Heap* heap) {
+static Heap* DestroyHeap(Heap* heap) {
 	if (heap == NULL)
 		return -1; // heap is not allocated
-	kfree_const(heap->arr); // Function calls kfree only if x is not in .rodata section.
+	printk(KERN_INFO DEVICE_NAME ": %d bytes of heap->arr Space freed.\n", sizeof(heap->arr));
+	kfree_const(heap->arr);
 	kfree_const(heap);
+	args_set = 0;
 	return 0;
 }
 
-static void insert(Heap *h, int32_t key) {
+static int32_t insert(Heap *h, int32_t key) {
 	if ( h->count < h->capacity) {
 		h->arr[h->count] = key;
 		heapify_bottom_top(h, h->count);
 		h->count++;
 		h->last_inserted = key;
 	}
+	else{
+		return -EACCES;
+	}
+	return 0;
 }
 
 static void heapify_bottom_top(Heap *h, int32_t index) {
@@ -137,12 +145,12 @@ static void heapify_bottom_top(Heap *h, int32_t index) {
 	}
 	else{	// Max Heap
 		if (h->arr[parent_node] < h->arr[index]) {
-                        //swap and recursive call
-                        temp = h->arr[parent_node];
-                        h->arr[parent_node] = h->arr[index];
-                        h->arr[index] = temp;
-                        heapify_bottom_top(h, parent_node);
-                }
+			//swap and recursive call
+			temp = h->arr[parent_node];
+			h->arr[parent_node] = h->arr[index];
+			h->arr[index] = temp;
+			heapify_bottom_top(h, parent_node);
+		}
 	}
 }
 
@@ -177,20 +185,20 @@ static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	else{	// Max heap
 		int32_t max;
 		if (left != -1 && h->arr[left] > h->arr[parent_node])
-                        max = left;
-                else
-                        max = parent_node;
-                if (right != -1 && h->arr[right] > h->arr[max])
-                        max = right;
+			max = left;
+		else
+			max = parent_node;
+		if (right != -1 && h->arr[right] > h->arr[max])
+			max = right;
 
-                if (max != parent_node) {
-                        temp = h->arr[max];
-                        h->arr[max] = h->arr[parent_node];
-                        h->arr[parent_node] = temp;
+		if (max != parent_node) {
+			temp = h->arr[max];
+			h->arr[max] = h->arr[parent_node];
+			h->arr[parent_node] = temp;
 
-                        // recursive  call
-                        heapify_top_bottom(h, max);
-                }
+			// recursive  call
+			heapify_top_bottom(h, max);
+		}
 	}
 }
 
@@ -199,7 +207,7 @@ static int32_t top(Heap *h) {
 	int32_t top;
 	if (h->count == 0) {
 		printk(KERN_INFO "\n__Heap is Empty__\n");
-		return -EACCES;
+		return NULL;
 	}
 	// replace first node by last and delete last
 	top = h->arr[0];
@@ -225,59 +233,96 @@ static int32_t PopMin(Heap *h) {
 static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_t* pos) {
 	if (!buf || !count)
 		return -EINVAL;
-
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
 
 	buffer_len = count < 256 ? count : 256;
 
-	printk(KERN_INFO "%.*s", (int)count, buf);
+	printk(KERN_INFO DEVICE_NAME ": %.*s", (int)count, buf);
+	printk(KERN_ALERT DEVICE_NAME ": VALUes :::: %d %d", buf[0], buf[1]);
+
+	if (buffer_len != 2 && buffer_len != 4) {
+		printk(KERN_ALERT DEVICE_NAME ": WRONG DATA SENT. %d bytes", buffer_len);
+		return -EINVAL;
+	}
+	if (args_set) {
+		int32_t num ;
+		memcpy(&num, buffer, sizeof(num));
+		printk(DEVICE_NAME ": num: %d\n", num);
+		int32_t ret;
+		ret = insert(global_heap, num);
+		if (ret < 0) // Heap is filled to capacity
+			return -1;
+		return sizeof(num);
+	}
+
+	if (buffer_len != 2)
+		return -EINVAL;
+	char heap_type;
+	int32_t heap_size;
+
+	heap_type = buf[0];
+	heap_size = buf[1];
+	printk(DEVICE_NAME ": HEAP TYPE: %d", heap_type);
+	printk(DEVICE_NAME ": HEAP SIZE: %d", heap_size);
+	printk(DEVICE_NAME ": RECIEVED:  %d bytes", count);
+
+
+	if (heap_type != MIN_HEAP && heap_type != MAX_HEAP) {
+		printk(KERN_ALERT DEVICE_NAME ": Wrong type!! %c\n", heap_type);
+		return -EINVAL;
+	}
+
+	if (heap_size <= 0 || heap_size > 100) {
+		printk(KERN_ALERT DEVICE_NAME ": Wrong size of heap %d!!\n", heap_size);
+		return -EINVAL;
+	}
+	
+	global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
+	global_heap = CreateHeap(heap_size, heap_type); // allocating space for new heap
+
+	args_set = 1;
 	return buffer_len;
 }
 
 
 static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos) {
-	int ret = buffer_len;
-
-	if (!buffer_len)
-		return 0;
 	if (!buf || !count)
 		return -EINVAL;
 
-	if (copy_to_user(buffer, buf, buffer_len))
-		return -ENOBUFS;
+	if (args_set == 0)
+		return -EACCES;
 
-	printk(KERN_INFO "%.*s", (int)buffer_len, buffer);
-	buffer_len = 0;
+	int32_t topnode;
+	topnode = PopMin(global_heap);
+	retval = copy_to_user(buf, (int32_t*)&topnode, sizeof(topnode));
 
-	return ret;
+	if (retval == 0 && topnode != -INF) {    // success!
+		printk(KERN_INFO DEVICE_NAME ": Sent %ld characters to the user\n", sizeof(topnode));
+		return sizeof(topnode);
+	}
+	else {
+		printk(KERN_INFO DEVICE_NAME ": Failed to send %d characters to the user\n", retval);
+		return -1;      // Failed -- return a bad address message (i.e. -14)
+	}
 }
 
-/** @brief The device open function that is called each time the device is opened
- *  This will only increment the numberOpens counter in this case.
- *  @param inodep A pointer to an inode object (defined in linux/fs.h)
- *  @param filep A pointer to a file object (defined in linux/fs.h)
- */
-static int dev_open(struct inode *inodep, struct file *filep) {
 
-	// if (!mutex_trylock(&ebbchar_mutex)) {                // Try to acquire the mutex (returns 0 on fail)
-	// 	printk(KERN_ALERT "EBBChar: Device in use by another process");
-	// 	return -EBUSY;
-	// }
+static int dev_open(struct inode *inodep, struct file *filep) {
+	if(!mutex_trylock(&heap_mutex)){
+		printk(KERN_ALERT DEVICE_NAME "Device in use by another process");
+		return -EBUSY;
+   	}
 	numberOpens++;
-	printk(KERN_INFO "EBBChar: Device has been opened %d time(s)\n", numberOpens);
+	printk(KERN_INFO DEVICE_NAME "Device has been opened %d time(s)\n", numberOpens);
 	return 0;
 }
 
-/** @brief The device release function that is called whenever the device is closed/released by
- *  the userspace program
- *  @param inodep A pointer to an inode object (defined in linux/fs.h)
- *  @param filep A pointer to a file object (defined in linux/fs.h)
- */
+
 static int dev_release(struct inode *inodep, struct file *filep) {
-	// mutex_unlock(&ebbchar_mutex);                      // release the mutex (i.e., lock goes up)
-	printk(KERN_INFO "EBBChar: Device successfully closed\n");
-	// DestroyHeap(global_heap);
+	mutex_unlock(&heap_mutex);
+	printk(KERN_INFO DEVICE_NAME "Device successfully closed\n");
+	global_heap = DestroyHeap(global_heap);
 	return 0;
 }
 
@@ -287,14 +332,18 @@ static int hello_init(void) {
 	if (!entry)
 		return -ENOENT;
 
-	printk(KERN_ALERT "Hello world\n");
+	global_heap = NULL;
+	printk(KERN_ALERT DEVICE_NAME ": Hello world\n");
+	mutex_init(&heap_mutex); 
 	return 0;
 }
 
 static void hello_exit(void) {
+	mutex_destroy(&heap_mutex);
+	global_heap = DestroyHeap(global_heap);
 	remove_proc_entry(DEVICE_NAME, NULL);
 
-	printk(KERN_ALERT "Goodbye\n");
+	printk(KERN_ALERT DEVICE_NAME "Goodbye\n");
 }
 
 static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
@@ -305,13 +354,13 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		if (retval)
 			return -1;
 
-		printk("HEAP TYPE: %d", pb2_args.heap_type);
-		printk("HEAP SIZE: %d", pb2_args.heap_size);
+		printk(KERN_INFO DEVICE_NAME "HEAP TYPE: %d", pb2_args.heap_type);
+		printk(KERN_INFO DEVICE_NAME "HEAP SIZE: %d", pb2_args.heap_size);
 
 		if (pb2_args.heap_type != 0 && pb2_args.heap_type != 1)
 			return -EINVAL;
 
-		DestroyHeap(global_heap); // destroy any existing heap before creating a new one
+		global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
 		global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new heap
 
 		args_set = 1;
@@ -319,7 +368,7 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 
 	case PB2_INSERT:
 		if (args_set == 0) {
-			printk(KERN_ALERT "argset=0\n");
+			printk(KERN_ALERT DEVICE_NAME "Heap not initialized");
 			return -EACCES;
 		}
 
@@ -331,13 +380,15 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		if(retval)
 			return -EINVAL;
 
-		printk("num: %d\n", num);
+		printk(KERN_INFO DEVICE_NAME "Number to be inserted in Heap: %d\n", num);
 		insert(global_heap, num);
 
 		break;
 	case PB2_GET_INFO:
-		if (args_set == 0)
+		if (args_set == 0){
+			printk(KERN_ALERT DEVICE_NAME "Heap not initialized");
 			return -EACCES;
+		}
 
 		heap.heap_type = pb2_args.heap_type;
 		heap.heap_size = global_heap->count;
@@ -351,8 +402,10 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		break;
 
 	case PB2_EXTRACT:
-		if (args_set == 0)
+		if (args_set == 0){
+			printk(KERN_ALERT DEVICE_NAME "Heap not initialized");
 			return -EACCES;
+		}
 
 		struct result res =
 		{

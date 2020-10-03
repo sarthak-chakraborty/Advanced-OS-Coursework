@@ -2,30 +2,14 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
-#include <linux/slab.h> // > for kmalloc_array
-#include <linux/mutex.h>	  // Required for the mutex functionality
+#include <linux/slab.h> 
+#include <linux/mutex.h>
 #define DEVICE_NAME "partb_1_16CS30031"
 #define INF  (0xffffffff)
 const char MIN_HEAP = 0xFF, MAX_HEAP = 0xF0;
 
-MODULE_LICENSE("GPL");            ///< The license type -- this affects available functionality
+MODULE_LICENSE("GPL");
 
-// static struct pb2_set_type_arguments {
-// 	int32_t heap_size; // size of the heap
-// 	int32_t heap_type; // heap type: 0 for min-heap, 1 for max-heap
-// } pb2_set_type_arguments;
-
-// static struct obj_info {
-// 	int32_t heap_size; // size of the heap
-// 	int32_t heap_type; // heap type: 0 for min-heap, 1 for max-heap
-// 	int32_t root; // value of the root node of the heap (null if size is 0).
-// 	int32_t last_inserted; // value of the last element inserted in the heap.
-// } obj_info;
-
-// static struct result {
-// 	int32_t result; // value of min/max element extracted.
-// 	int32_t heap_size; // size of the heap after extracting.
-// } result;
 
 struct Heap {
 	int32_t *arr;
@@ -45,37 +29,31 @@ typedef struct Heap Heap;
 static Heap *CreateHeap(int32_t capacity, char heap_type);
 static Heap* DestroyHeap(Heap* heap);
 static int32_t insert(Heap *h, int32_t key);
-// static void print(Heap *h);
 static void heapify_bottom_top(Heap *h, int32_t index);
 static void heapify_top_bottom(Heap *h, int32_t parent_node);
 static int32_t PopMin(Heap *h);
 
-// static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static int     dev_open(struct inode *, struct file *);
 static int     dev_release(struct inode *, struct file *);
 static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 
 
-static int    numberOpens = 0;              ///< Counts the number of times the device is opened
+static int    numberOpens = 0;
 static char buffer[256] = {0};
 static int buffer_len = 0;
 static int num;
 static int args_set = 0;
 static int retval = -1;
-// static struct pb2_set_type_arguments pb2_args;
-// static struct obj_info heap;
-static Heap* global_heap;
-// static const int32_t INF = INT32_MAX;
 
-// static struct file_operations file_ops;
+static Heap* global_heap;
+
 static struct file_operations file_ops =
 {
 	.open = dev_open,
 	.read = dev_read,
 	.write = dev_write,
 	.release = dev_release,
-	// .unlocked_ioctl = dev_ioctl,
 };
 
 static Heap *CreateHeap(int32_t capacity, char heap_type) {
@@ -103,8 +81,6 @@ static Heap *CreateHeap(int32_t capacity, char heap_type) {
 static Heap* DestroyHeap(Heap* heap) {
 	if (heap == NULL)
 		return -1; // heap is not allocated
-	// kfree_const(heap->arr); // Function calls kfree only if x is not in .rodata section.
-	// kfree_const(heap);
 	printk(KERN_INFO DEVICE_NAME ": %d bytes of heap->arr Space freed.\n", sizeof(heap->arr));
 	kfree(heap->arr);
 	kfree(heap);
@@ -129,19 +105,29 @@ static void heapify_bottom_top(Heap *h, int32_t index) {
 	int32_t temp;
 	int32_t parent_node = (index - 1) / 2;
 
-	if (h->arr[parent_node] > h->arr[index]) {
-		//swap and recursive call
-		temp = h->arr[parent_node];
-		h->arr[parent_node] = h->arr[index];
-		h->arr[index] = temp;
-		heapify_bottom_top(h, parent_node);
+	if(h->heap_type == 0){	// Min Heap
+		if (h->arr[parent_node] > h->arr[index]) {
+			//swap and recursive call
+			temp = h->arr[parent_node];
+			h->arr[parent_node] = h->arr[index];
+			h->arr[index] = temp;
+			heapify_bottom_top(h, parent_node);
+		}
+	}
+	else{	// Max Heap
+		if (h->arr[parent_node] < h->arr[index]) {
+			//swap and recursive call
+			temp = h->arr[parent_node];
+			h->arr[parent_node] = h->arr[index];
+			h->arr[index] = temp;
+			heapify_bottom_top(h, parent_node);
+		}
 	}
 }
 
 static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	int32_t left = parent_node * 2 + 1;
 	int32_t right = parent_node * 2 + 2;
-	int32_t min;
 	int32_t temp;
 
 	if (left >= h->count || left < 0)
@@ -149,20 +135,41 @@ static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	if (right >= h->count || right < 0)
 		right = -1;
 
-	if (left != -1 && h->arr[left] < h->arr[parent_node])
-		min = left;
-	else
-		min = parent_node;
-	if (right != -1 && h->arr[right] < h->arr[min])
-		min = right;
+	if(h->heap_type == 0){	// Min heap
+		int32_t min;
+		if (left != -1 && h->arr[left] < h->arr[parent_node])
+			min = left;
+		else
+			min = parent_node;
+		if (right != -1 && h->arr[right] < h->arr[min])
+			min = right;
 
-	if (min != parent_node) {
-		temp = h->arr[min];
-		h->arr[min] = h->arr[parent_node];
-		h->arr[parent_node] = temp;
+		if (min != parent_node) {
+			temp = h->arr[min];
+			h->arr[min] = h->arr[parent_node];
+			h->arr[parent_node] = temp;
 
-		// recursive  call
-		heapify_top_bottom(h, min);
+			// recursive  call
+			heapify_top_bottom(h, min);
+		}
+	}
+	else{	// Max heap
+		int32_t max;
+		if (left != -1 && h->arr[left] > h->arr[parent_node])
+			max = left;
+		else
+			max = parent_node;
+		if (right != -1 && h->arr[right] > h->arr[max])
+			max = right;
+
+		if (max != parent_node) {
+			temp = h->arr[max];
+			h->arr[max] = h->arr[parent_node];
+			h->arr[parent_node] = temp;
+
+			// recursive  call
+			heapify_top_bottom(h, max);
+		}
 	}
 }
 // static int32_t top(Heap *h) {
@@ -188,14 +195,8 @@ static int32_t PopMin(Heap *h) {
 	heapify_top_bottom(h, 0);
 	return pop;
 }
-// static void print(Heap *h) {
-// 	int32_t i;
-// 	printk(KERN_INFO DEVICE_NAME ": ____________Print Heap_____________\n");
-// 	for (i = 0; i < h->count; i++) {
-// 		printk(KERN_INFO "-> %d ", h->arr[i]);
-// 	}
-// 	printk(KERN_INFO "->__/\\__\n");
-// }
+
+
 static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_t* pos) {
 	if (!buf || !count)
 		return -EINVAL;
@@ -330,10 +331,6 @@ static int hello_init(void) {
 	if (!entry)
 		return -ENOENT;
 
-	// file_ops.owner = THIS_MODULE;
-	// file_ops.dev_write = write;
-	// file_ops.dev_read = read;
-	// file_ops.unlocked_ioctl = dev_ioctl;
 	global_heap = NULL;
 	printk(KERN_ALERT DEVICE_NAME ": Hello world\n");
 	return 0;
@@ -346,77 +343,6 @@ static void hello_exit(void) {
 	printk(KERN_ALERT DEVICE_NAME ": Goodbye\n");
 }
 
-// static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-// 	switch (cmd) {
-// 	case PB2_SET_TYPE:
-// 		;
-// 		retval = copy_from_user(&pb2_args, (struct pb2_set_type_arguments *)arg, sizeof(pb2_args));
-// 		if (retval)
-// 			return -1;
-
-// 		printk("HEAP TYPE: %d", pb2_args.heap_type);
-// 		printk("HEAP SIZE: %d", pb2_args.heap_size);
-
-
-// 		if (pb2_args.heap_type != 0 && pb2_args.heap_type != 1)
-// 			return -EINVAL;
-
-// 		global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
-// 		global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new heap
-
-
-// 		args_set = 1;
-// 		break;
-
-// 	case PB2_INSERT:
-// 		if (args_set == 0) {
-// 			printk(KERN_ALERT "argset=0\n");
-// 			return -EACCES;
-// 		}
-
-// 		// If heap is full, return EACCESS
-
-// 		retval = copy_from_user(&num, (int *)arg, sizeof(int));
-
-// 		printk("num: %d\n", num);
-// 		insert(global_heap, num);
-
-// 		break;
-// 	case PB2_GET_INFO:
-// 		if (args_set == 0)
-// 			return -EACCES;
-
-// 		heap.heap_type = pb2_args.heap_type;
-// 		heap.heap_size = global_heap->count;
-// 		heap.root = top(global_heap);
-// 		heap.last_inserted = global_heap->last_inserted;
-
-// 		retval = copy_to_user((struct obj_info *)arg, &heap, sizeof(struct obj_info));
-
-// 		if (retval)
-// 			return -1;
-
-// 		break;
-
-// 	case PB2_EXTRACT:
-// 		if (args_set == 0)
-// 			return -EACCES;
-// 		struct result res =
-// 		{
-// 			.result = PopMin(global_heap),
-// 			.heap_size = global_heap->count,
-// 		};
-// 		retval = copy_to_user((struct result *)arg, &res, sizeof(struct result));
-// 		if (retval)
-// 			return -1;
-// 		break;
-
-// 	default:
-// 		return -EINVAL;
-
-// 	}
-// 	return 0;
-// }
 module_init(hello_init);
 module_exit(hello_exit);
 
