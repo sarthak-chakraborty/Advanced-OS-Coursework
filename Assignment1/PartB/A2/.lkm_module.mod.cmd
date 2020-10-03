@@ -1,0 +1,1 @@
+cmd_/home/sarthak/Desktop/Advanced-OS-Coursework/Assignment1/PartB/A2/lkm_module.mod := { echo  /home/sarthak/Desktop/Advanced-OS-Coursework/Assignment1/PartB/A2/lkm_module.o; echo; } > /home/sarthak/Desktop/Advanced-OS-Coursework/Assignment1/PartB/A2/lkm_module.mod

@@ -7,6 +7,9 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 
+#define RED   "\x1B[31m"
+#define GRN   "\x1B[32m"
+#define RESET "\x1B[0m"
 
 #define PB2_SET_TYPE _IOW(0x10, 0x31, int32_t*)
 #define PB2_INSERT _IOW(0x10, 0x32, int32_t*)
@@ -37,37 +40,152 @@ int main(){
 	fd = open("/proc/partb_2_16CS30044", O_RDWR);
 	if (fd < 0){
 		perror("Error: ");
-		return 1;
+		return -1;
 	}
 
 	printf("File opened\n");
 
+	// int ret;
+	// struct pb2_set_type_arguments pb2_args;
+	
+	// Initialize min heap =============================================
+    	printf("==== Initializing Min Heap ====\n");
 	struct pb2_set_type_arguments pb2_args;
+	// min heap
 	pb2_args.heap_type = 0;
-	pb2_args.heap_size = 6;
+	// size of the heap
+	pb2_args.heap_size = 10;
 
 	int ret = ioctl(fd, PB2_SET_TYPE, &pb2_args);
-	printf("%d\n",ret);
+	if(ret < 0){
+        	perror("Initialization failed");
+        	close(fd);
+	        return 0;
+   	}
 	
-	int num = 17;
-	ret = ioctl(fd, PB2_INSERT, &num);
-	printf("%d\n", ret);
+	
+	int32_t tmp;
+	int32_t val[10] = {9, 3, 6, 4, 2, 5, 2, 12, 15, 7};
+	int32_t minsorted[10] = {2, 2, 3, 4, 5, 6, 7, 9, 12, 15};
+	int32_t maxsorted[10] = {15, 12, 9, 7, 6, 5, 4, 3, 2, 2};
 
-	
 	struct obj_info heap_info;
-	//int n;
+	struct result res;
+	int num;
+	
+	// Test Min Heap ====================================================
+	printf("======= Test Min Heap =========\n");
+
+    	// Insert --------------------------------------------------------
+	for (int i = 0; i < 10; i++)
+    	{
+        	printf("Inserting %d\n", val[i]);
+        	ret = ioctl(fd, PB2_INSERT, &val[i]);
+        	if(ret < 0){
+            		perror("ERROR! Write failed");
+            		close(fd);
+            		return 0;
+        	}
+        }
 
 	ret = ioctl(fd, PB2_GET_INFO, (struct obj_info *) &heap_info);
-	if(ret == 0){
-		printf("HEAP INFO:\n");
-		printf("%d\n",ret);
-		printf("Heap Type: %d\n", heap_info.heap_type);
-		printf("Heap Size: %d\n", heap_info.heap_size);
-		//printf("%d\n",n);
-	}
-	
+        if(ret == 0){
+                   printf("\n================HEAP INFO=================\n");
+        	   printf("Heap Type: %d\n", heap_info.heap_type);
+                   printf("Heap Size: %d\n", heap_info.heap_size);
+               	   printf("Lst inserted: %d\n", heap_info.last_inserted);
+        }
+	printf("\n");
 
-	close(fd);
+	// Verify ---------------------------------------------------------
+    	for (int i = 0; i < 10; i++)
+    	{
+        	printf("Extracting..\n");
+        	ret = ioctl(fd, PB2_EXTRACT, (struct result *) &res);
+        	if(ret < 0){
+            		perror(RED "ERROR! Read failed\n" RESET);
+            		close(fd);
+            		return 0;
+        	}
+        	printf("Extracted: %d\n", res.result);
+        	if(res.result == minsorted[i]){
+            		printf(GRN "Results Matched\n" RESET);
+        	}
+        	else {
+            		printf(RED "ERROR! Results Do Not Match. Expected %d, Found %d\n" RESET, (int)minsorted[i], res.result);
+        	}
+    	}
+   	 close(fd);
+       	
+	/*	
+	// Test Max Heap ====================================================
+	fd = open("/proc/partb_2_16CS30044", O_RDWR);
+        if (fd < 0){
+                perror("Error: ");
+                return -1;
+        }
+
+        printf("File opened\n");
+
+        // Initialize max heap =============================================
+        printf("==== Initializing Max Heap ====\n");
+        // max heap
+        pb2_args.heap_type = 1;
+        // size of the heap
+        pb2_args.heap_size = 10;
+
+        ret = ioctl(fd, PB2_SET_TYPE, &pb2_args);
+        if(ret < 0){
+                perror("Initialization failed");
+                close(fd);
+                return 0;
+        }
+
+	// Test Max Heap ====================================================
+        printf("======= Test Max Heap =========\n");
+
+        // Insert --------------------------------------------------------
+        for (int i = 0; i < 10; i++)
+        {
+                printf("Inserting %d\n", val[i]);
+                ret = ioctl(fd, PB2_INSERT, &val[i]);
+                if(ret < 0){
+                        perror("ERROR! Write failed");
+                        close(fd);
+                        return 0;
+                }
+        }
+
+        ret = ioctl(fd, PB2_GET_INFO, (struct obj_info *) &heap_info);
+        if(ret == 0){
+                   printf("\n===========HEAP INFO==============\n");
+                   printf("Heap Type: %d\n", heap_info.heap_type);
+                   printf("Heap Size: %d\n", heap_info.heap_size);
+                   printf("Lst inserted: %d\n", heap_info.last_inserted);
+        }
+	printf("\n");
+
+	// Verify ---------------------------------------------------------
+        for (int i = 0; i < 10; i++)
+        {
+                printf("Extracting..\n");
+                ret = ioctl(fd, PB2_EXTRACT, (struct result *) &res);
+                if(ret < 0){
+                        perror(RED "ERROR! Read failed\n" RESET);
+                        close(fd);
+                        return 0;
+                }
+                printf("Extracted: %d\n", res.result);
+                if(res.result == maxsorted[i]){
+                        printf(GRN "Results Matched\n" RESET);
+                }
+                else {
+                        printf(RED "ERROR! Results Do Not Match. Expected %d, Found %d\n" RESET, (int)maxsorted[i], res.result);
+                }
+        }
+         close(fd);
+	*/
+
 
 	return 0;
 }
