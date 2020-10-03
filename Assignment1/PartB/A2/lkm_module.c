@@ -74,6 +74,7 @@ static Heap* global_heap;
 // static struct file_operations file_ops;
 static struct file_operations file_ops =
 {
+	.owner = THIS_MODULE,
 	.open = dev_open,
 	.read = dev_read,
 	.write = dev_write,
