@@ -3,6 +3,7 @@
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h> // > for kmalloc_array
+#include <linux/mutex.h>	  // Required for the mutex functionality
 #define DEVICE_NAME "partb_1_16CS30031"
 #define INF  (0xffffffff)
 const char MIN_HEAP = 0xFF, MAX_HEAP = 0xF0;
@@ -42,7 +43,7 @@ typedef struct Heap Heap;
 // static long insert_into_user_heap();
 // static long pop_from_user_heap();
 static Heap *CreateHeap(int32_t capacity, char heap_type);
-static int32_t DestroyHeap(Heap* heap);
+static Heap* DestroyHeap(Heap* heap);
 static int32_t insert(Heap *h, int32_t key);
 // static void print(Heap *h);
 static void heapify_bottom_top(Heap *h, int32_t index);
@@ -79,17 +80,17 @@ static struct file_operations file_ops =
 
 static Heap *CreateHeap(int32_t capacity, char heap_type) {
 	// using void * kmalloc_array(size_t n, size_t size, gfp_t flags)
-	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_ATOMIC); //one is number of heap
+	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_KERNEL); //one is number of heap
 
 	//check if memory allocation is fails
 	if (h == NULL) {
 		printk(KERN_ALERT DEVICE_NAME ": Memory Error!");
 		return NULL;
 	}
-	h->heap_type = heap_type == MIN_HEAP ? 0 : 1;
+	h->heap_type = ((heap_type == MIN_HEAP) ? 0 : 1);
 	h->count = 0;
 	h->capacity = capacity;
-	h->arr = (int32_t *) kmalloc_array(capacity, sizeof(int32_t), GFP_ATOMIC); //size in bytes
+	h->arr = (int32_t *) kmalloc_array(capacity, sizeof(int32_t), GFP_KERNEL); //size in bytes
 
 	//check if allocation succeed
 	if ( h->arr == NULL) {
@@ -99,15 +100,16 @@ static Heap *CreateHeap(int32_t capacity, char heap_type) {
 	return h;
 }
 
-static int32_t DestroyHeap(Heap* heap) {
+static Heap* DestroyHeap(Heap* heap) {
 	if (heap == NULL)
 		return -1; // heap is not allocated
 	// kfree_const(heap->arr); // Function calls kfree only if x is not in .rodata section.
 	// kfree_const(heap);
+	printk(KERN_INFO DEVICE_NAME ": %d bytes of heap->arr Space freed.\n", sizeof(heap->arr));
 	kfree(heap->arr);
 	kfree(heap);
 	args_set = 0;
-	return 0;
+	return NULL;
 }
 
 static int32_t insert(Heap *h, int32_t key) {
@@ -197,7 +199,6 @@ static int32_t PopMin(Heap *h) {
 static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_t* pos) {
 	if (!buf || !count)
 		return -EINVAL;
-
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
 
@@ -208,7 +209,7 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	printk(KERN_ALERT DEVICE_NAME ": VALUes :::: %d %d", buf[0], buf[1]);
 	// printk(KERN_ALERT "VALUes :::: %c %c", buffer[0], buffer[1]);
 
-	if (buffer_len != 2 || buffer_len != 4) {
+	if (buffer_len != 2 && buffer_len != 4) {
 		printk(KERN_ALERT DEVICE_NAME ": WRONG DATA SENT. %d bytes", buffer_len);
 		return -EINVAL;
 	}
@@ -253,9 +254,9 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		printk(KERN_ALERT DEVICE_NAME ": Wrong size of heap %d!!\n", heap_size);
 		return -EINVAL;
 	}
-	// DestroyHeap(global_heap); // destroy any existing heap before creating a new one
+	// global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
 	// global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new heap
-	DestroyHeap(global_heap); // destroy any existing heap before creating a new one
+	global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
 	global_heap = CreateHeap(heap_size, heap_type); // allocating space for new heap
 
 	args_set = 1;
@@ -319,7 +320,7 @@ static int dev_open(struct inode *inodep, struct file *filep) {
 static int dev_release(struct inode *inodep, struct file *filep) {
 	// mutex_unlock(&ebbchar_mutex);                      // release the mutex (i.e., lock goes up)
 	printk(KERN_INFO DEVICE_NAME ": Device successfully closed\n");
-	DestroyHeap(global_heap);
+	global_heap = DestroyHeap(global_heap);
 	return 0;
 }
 
@@ -333,12 +334,13 @@ static int hello_init(void) {
 	// file_ops.dev_write = write;
 	// file_ops.dev_read = read;
 	// file_ops.unlocked_ioctl = dev_ioctl;
-
+	global_heap = NULL;
 	printk(KERN_ALERT DEVICE_NAME ": Hello world\n");
 	return 0;
 }
 
 static void hello_exit(void) {
+	global_heap = DestroyHeap(global_heap);
 	remove_proc_entry(DEVICE_NAME, NULL);
 
 	printk(KERN_ALERT DEVICE_NAME ": Goodbye\n");
@@ -359,7 +361,7 @@ static void hello_exit(void) {
 // 		if (pb2_args.heap_type != 0 && pb2_args.heap_type != 1)
 // 			return -EINVAL;
 
-// 		DestroyHeap(global_heap); // destroy any existing heap before creating a new one
+// 		global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
 // 		global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new heap
 
 
