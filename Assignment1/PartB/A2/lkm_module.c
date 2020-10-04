@@ -4,7 +4,10 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h> 
 #include <linux/mutex.h>
+
 #define DEVICE_NAME "partb_2_16CS30044"
+#define INF  (0xffffffff)
+const char MIN_HEAP = 0xFF, MAX_HEAP = 0xF0;
 
 #define PB2_SET_TYPE _IOW(0x10, 0x31, int32_t*)
 #define PB2_INSERT _IOW(0x10, 0x32, int32_t*)
@@ -95,7 +98,7 @@ static Heap *CreateHeap(int32_t capacity, int32_t heap_type) {
 	h->count = 0;
 	h->capacity = capacity;
 	h->arr = (int32_t *) kmalloc_array(capacity, sizeof(int32_t), GFP_KERNEL); //size in bytes
-	h->heap_type = NULL;
+	h->last_inserted = NULL;
 
 	//check if allocation succeed
 	if ( h->arr == NULL) {

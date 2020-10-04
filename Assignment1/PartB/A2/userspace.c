@@ -62,6 +62,38 @@ int main(){
         	close(fd);
 	        return 0;
    	}
+
+	
+	struct obj_info myobj_info;
+	// Check info
+	ret = ioctl(fd, PB2_GET_INFO, &myobj_info);
+    	if(myobj_info.heap_size == 0){
+        	printf(GRN "Size Matched\n" RESET);
+    	}
+    	else {
+        	printf(RED "ERROR! Size Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_size);
+    	}
+
+    	if(myobj_info.heap_type == 0){
+        	printf(GRN "Type Matched\n" RESET);
+    	}
+    	else {
+        	printf(RED "ERROR! Type Do Not Match. Expected %d, Found %d\n" RESET, 0, (int)myobj_info.heap_type);
+    	}
+
+    	if(myobj_info.root == NULL){
+        	printf(GRN "ROOT Matched\n" RESET);
+    	}
+    	else {
+        	printf(RED "ERROR! ROOT Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.root);
+    	}
+
+    	if(myobj_info.last_inserted == NULL){
+        	printf(GRN "last_inserted Matched\n" RESET);
+    	}
+    	else {
+        	printf(RED "ERROR! last_inserted Do Not Match. Expected %d, Found %d\n" RESET, (int)NULL, (int)myobj_info.last_inserted);
+    	}
 	
 	
 	int32_t tmp;
@@ -72,6 +104,13 @@ int main(){
 	struct obj_info heap_info;
 	struct result res;
 	int num;
+
+	// =============================================
+	char c;
+	printf("\nPRESS ENTER to continue...\n");
+	scanf("%c",&c);
+	// =============================================
+	//
 	
 	// Test Min Heap ====================================================
 	printf("======= Test Min Heap =========\n");
