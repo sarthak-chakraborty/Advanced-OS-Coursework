@@ -18,7 +18,11 @@ int main(int argc, char *argv[]) {
     // strcat(procfile, argv[1]);
     strcat(procfile, DEVICE_NAME);
 
-    fork();
+    int pid = fork();
+    // if (pid == 0) {
+    //     sleep(1);
+    // }
+
     int fd = open(procfile, O_RDWR) ;
 
     if (fd < 0) {

@@ -257,16 +257,16 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
 
-	if (!mutex_trylock(&heap_mutex)) {
-		printk(KERN_ALERT DEVICE_NAME " Device is in Use <dev_write>");
-		return -EBUSY;
-	}
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
-		printk(KERN_ALERT DEVICE_NAME "RAISED ERROR in dev_write entry is non-existent");
-		mutex_unlock(&heap_mutex);
+		printk(KERN_ALERT DEVICE_NAME "RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
+	// if (!mutex_trylock(&heap_mutex)) {
+	// 	printk(KERN_ALERT DEVICE_NAME " Device is in Use <dev_write>");
+	// 	return -EBUSY;
+	// }
 	args_set = (entry->global_heap) ? 1 : 0;
 
 	buffer_len = count < 256 ? count : 256;
@@ -278,7 +278,7 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 
 	if (buffer_len != 2 && buffer_len != 4) {
 		printk(KERN_ALERT DEVICE_NAME ": WRONG DATA SENT. %d bytes", buffer_len);
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 	if (args_set) {
@@ -288,10 +288,10 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		int32_t ret;
 		ret = insert(entry->global_heap, num);
 		if (ret < 0) { // Heap is filled to capacity
-			mutex_unlock(&heap_mutex);
+			// mutex_unlock(&heap_mutex);
 			return -1;
 		}
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return sizeof(num);
 	}
 
@@ -300,7 +300,7 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	// if (retval)
 	// 	return -1;
 	if (buffer_len != 2) {
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 	char heap_type;
@@ -320,20 +320,20 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 
 	if (heap_type != MIN_HEAP && heap_type != MAX_HEAP) {
 		printk(KERN_ALERT DEVICE_NAME ": Wrong type!! %c\n", heap_type);
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 
 	if (heap_size <= 0 || heap_size > 100) {
 		printk(KERN_ALERT DEVICE_NAME ": Wrong size of heap %d!!\n", heap_size);
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 	// global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
 	// global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new heap
 	entry->global_heap = DestroyHeap(entry->global_heap);// destroy any existing heap before creating a new one
 	entry->global_heap = CreateHeap(heap_size, heap_type); // allocating space for new heap
-	mutex_unlock(&heap_mutex);
+	// mutex_unlock(&heap_mutex);
 
 	args_set = 1;
 	return buffer_len;
@@ -349,14 +349,14 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 		return -EINVAL;
 	if (args_set == 0)
 		return -EACCES;
-	if (!mutex_trylock(&heap_mutex)) {
-		printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
-		return -EBUSY;
-	}
+	// if (!mutex_trylock(&heap_mutex)) {
+	// 	printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
+	// 	return -EBUSY;
+	// }
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
 		printk(KERN_ALERT DEVICE_NAME "RAISED ERROR in dev_read entry is non-existent");
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
 	args_set = (entry->global_heap) ? 1 : 0;
@@ -367,13 +367,13 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	// 	return -1;
 	if (retval == 0 && topnode != -INF) {    // success!
 		printk(KERN_INFO DEVICE_NAME ": Sent %ld characters to the user\n", sizeof(topnode));
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return sizeof(topnode);
 		// return (size_of_message = 0); // clear the position to the start and return 0
 	}
 	else {
 		printk(KERN_INFO DEVICE_NAME ": Failed to send %d characters to the user\n", retval);
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -1;      // Failed -- return a bad address message (i.e. -14)
 	}
 	// if (copy_to_user(buffer, buf, buffer_len))
@@ -395,17 +395,17 @@ static int dev_open(struct inode *inodep, struct file *filep) {
 	// 	printk(KERN_ALERT DEVICE_NAME ": Device in use by another process");
 	// 	return -EBUSY;
 	// }
-	if (!mutex_trylock(&heap_mutex)) {
-		printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_open>");
-		return -EBUSY;
-	}
 	if (get_entry_from_key(current->pid) != NULL) { // File has already been opened, please close it before using it again
 		printk(KERN_ALERT DEVICE_NAME ": PID %d, Tried to open twice\n", current->pid);
-		mutex_unlock(&heap_mutex);
+		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
 	entry = kmalloc(sizeof(struct h_struct), GFP_KERNEL);
 	*entry = (struct h_struct) {current->pid, NULL, NULL};
+	if (!mutex_trylock(&heap_mutex)) {
+		printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_open>");
+		return -EBUSY;
+	}
 	// 	.key = current->pid,
 	// 	.global_heap = NULL,
 	// 	.node = NULL,
