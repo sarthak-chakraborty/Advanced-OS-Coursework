@@ -77,7 +77,7 @@ static void key_add(struct h_struct* entry) {
 
 
 static struct h_struct* get_entry_from_key(int key) {
-	struct h_struct* temp = htable;
+	struct h_struct* temp = htable->next;
 	while (temp != NULL) {
 		if (temp->key == key) {
 			return temp;
@@ -288,16 +288,13 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	args_set = (entry->global_heap) ? 1 : 0;
 	buffer_len = count < 256 ? count : 256;
 
-	// printk(KERN_INFO DEVICE_NAME ": %.*s", (int)count, buf);
-	// printk(KERN_ALERT DEVICE_NAME ": VALUes :::: %d %d", buf[0], buf[1]);
-
 	if (buffer_len != 2 && buffer_len != 4) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d WRONG DATA SENT. %d bytes", current->pid, buffer_len);
 		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
-	if (args_set) {
 
+	if (args_set) {
 		memcpy(&num, buffer, sizeof(num));
 		printk(DEVICE_NAME ": PID %d writing %d to heap\n", current->pid, num);
 
@@ -358,6 +355,7 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	args_set = (entry->global_heap) ? 1 : 0;
 
 	if (args_set == 0) { // heap hasn't been initialized yet
+		printk(KERN_ALERT DEVICE_NAME " : PID %d Heap not initialized",current->pid);
 		return -EACCES;
 	}
 	topnode = PopMin(entry->global_heap);

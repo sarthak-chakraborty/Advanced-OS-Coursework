@@ -38,18 +38,18 @@ struct result{
 int main(){
 
     int pid = fork();
+    fork(); fork();
     /*
     int32_t tmp;
     int32_t val[10] = {9, 3, 6, 4, 2, 5, 2, 12, 15, 7};
     int32_t minsorted[10] = {2, 2, 3, 4, 5, 6, 7, 9, 12, 15};
     int32_t maxsorted[10] = {15, 12, 9, 7, 6, 5, 4, 3, 2, 2};
     */
-
+    
     int32_t tmp;
     int32_t val[10];
     int32_t minsorted[10];
     int32_t maxsorted[10];
-
 
     if (pid == 0) {
         val[0] = 9;
@@ -77,6 +77,7 @@ int main(){
         minsorted[3] = 16;
         minsorted[4] = 19;
     }
+    
 
 	int fd, value, number;
 	fd = open("/proc/partb_2_16CS30044", O_RDWR);

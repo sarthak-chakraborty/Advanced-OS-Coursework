@@ -1,4 +1,4 @@
-obj-m+=lkm_module.o
+obj-m+=lkm_moduleA2.o
 all:
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
 
