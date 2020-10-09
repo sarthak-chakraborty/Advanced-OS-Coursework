@@ -1,0 +1,37 @@
+[ 4209.724258] partb_1_16CS30031: PID 11151 !!!! Adding 11151 to HashTable
+[ 4209.724259] partb_1_16CS30031: PID 11151 Device has been opened 31 time(s)
+[ 4209.724260] <print_key> key = 11151
+[ 4209.724310] partb_1_16CS30031: PID 11152 !!!! Adding 11152 to HashTable
+[ 4209.724311] partb_1_16CS30031: PID 11152 Device has been opened 32 time(s)
+[ 4209.724312] <print_key> key = 11152
+[ 4209.724312] <print_key> key = 11151
+[ 4209.724343] partb_1_16CS30031: PID 11151 HEAP TYPE: -1
+[ 4209.724344] partb_1_16CS30031: PID 11151 HEAP SIZE: 20
+[ 4209.724345] partb_1_16CS30031: PID 11151 RECIEVED:  2 bytes
+[ 4209.724480] partb_1_16CS30031: PID 11152 HEAP TYPE: -1
+[ 4209.724481] partb_1_16CS30031: PID 11152 HEAP SIZE: 20
+[ 4209.724481] partb_1_16CS30031: PID 11152 RECIEVED:  2 bytes
+[ 4209.724509] partb_1_16CS30031: PID 11151 writing 19 to heap
+[ 4209.724518] partb_1_16CS30031: PID 11152 writing 9 to heap
+[ 4209.724537] partb_1_16CS30031: PID 11152 writing 3 to heap
+[ 4209.724565] partb_1_16CS30031: PID 11152 writing 6 to heap
+[ 4209.724578] partb_1_16CS30031: PID 11152 writing 4 to heap
+[ 4209.724591] partb_1_16CS30031: PID 11152 writing 2 to heap
+[ 4209.724650] partb_1_16CS30031: PID 11151 writing 13 to heap
+[ 4209.724655] partb_1_16CS30031: PID 11151 writing 16 to heap
+[ 4209.724659] partb_1_16CS30031: PID 11151 writing 14 to heap
+[ 4209.724664] partb_1_16CS30031: PID 11151 writing 12 to heap
+[ 4209.724691] partb_1_16CS30031: PID 11152 Sent 4 chars with value 2 to the user
+[ 4209.724714] partb_1_16CS30031: PID 11151 Sent 4 chars with value 12 to the user
+[ 4209.724727] partb_1_16CS30031: PID 11152 Sent 4 chars with value 3 to the user
+[ 4209.724754] partb_1_16CS30031: PID 11152 Sent 4 chars with value 4 to the user
+[ 4209.724786] partb_1_16CS30031: PID 11152 Sent 4 chars with value 6 to the user
+[ 4209.724806] partb_1_16CS30031: PID 11152 Sent 4 chars with value 9 to the user
+[ 4209.724833] partb_1_16CS30031: PID 11152, 8 bytes of heap->arr Space freed.
+[ 4209.724834] partb_1_16CS30031: PID 11151 Sent 4 chars with value 13 to the user
+[ 4209.724835] PID 11152 <key_del> Kfree key = 11152
+[ 4209.724836] partb_1_16CS30031: PID 11152 Device successfully closed
+[ 4209.724836] <print_key> key = 11151
+[ 4209.724934] partb_1_16CS30031: PID 11151, 8 bytes of heap->arr Space freed.
+[ 4209.724935] PID 11151 <key_del> Kfree key = 11151
+[ 4209.724936] partb_1_16CS30031: PID 11151 Device successfully closed
