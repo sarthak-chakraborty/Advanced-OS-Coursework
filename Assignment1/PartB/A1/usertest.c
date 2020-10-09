@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[]) {
     // if ( argc != 2 ) {
-    //     printf("Please provide your LKM proc file name as an argument.\nExample:\n./test_ass1 partb_1_<roll no>\n");
+    //     printf("PID %d Please provide your LKM proc file name as an argument.\nExample:\n./test_ass1 partb_1_<roll no>\n");
     //     return -1;
     // }
     char procfile[100] = "/proc/";
@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
     strcat(procfile, DEVICE_NAME);
 
     int pid = fork();
+    fork(); fork();
 
     /*
     int32_t tmp;
@@ -46,7 +47,7 @@ int main(int argc, char *argv[]) {
         minsorted[3] = 6;
         minsorted[4] = 9;
     }
-    else{
+    else {
         val[0] = 19;
         val[1] = 13;
         val[2] = 16;
@@ -63,11 +64,12 @@ int main(int argc, char *argv[]) {
     int fd = open(procfile, O_RDWR) ;
 
     if (fd < 0) {
+        printf("PID %d :: ", pid);
         perror("Could not open flie /proc/ass1");
         return 0;
     }
     // Initialize min heap =============================================
-    printf("==== Initializing Min Heap ====\n");
+    printf("PID %d ==== Initializing Min Heap ====\n", pid);
     char buf[2];
     // min heap
     buf[0] = 0xFF;
@@ -77,47 +79,50 @@ int main(int argc, char *argv[]) {
     int result;
     result = write(fd, buf, 2);
     if (result < 0) {
+        printf("PID %d :: ", pid);
         perror("Write failed");
         close(fd);
         return 0;
     }
-    printf("Written %d bytes\n", result);
+    printf("PID %d Written %d bytes\n", pid, result);
 
 
 
     // Test Min Heap ====================================================
-    printf("======= Test Min Heap =========\n");
+    printf("PID %d ======= Test Min Heap =========\n", pid);
 
     // // Insert --------------------------------------------------------
     for (int i = 0; i < 5; i++)
     {
-        printf("Inserting %d\n", val[i]);
+        printf("PID %d Inserting %d\n", pid, val[i]);
         result = write(fd, &val[i], sizeof(int32_t));
         if (result < 0) {
+            printf("PID %d :: ", pid);
             perror("ERROR! Write failed");
             close(fd);
             return 0;
         }
-        printf("Written %d bytes\n", result);
+        printf("PID %d Written %d bytes\n", pid, result);
     }
     // int fd1 = open(procfile, O_RDWR) ;
-    //printf("Received this when tried to open it twice %d\n", fd1);
+    //printf("PID %d Received this when tried to open it twice %d\n", fd1);
     // Verify ---------------------------------------------------------
     for (int i = 0; i < 5; i++)
     {
-        printf("Extracting..\n");
+        printf("PID %d Extracting..\n", pid);
         result = read(fd, (void *)(&tmp), sizeof(int32_t));
         if (result < 0) {
+            printf("PID %d :: ", pid);
             perror(RED "ERROR! Read failed\n" RESET);
             close(fd);
             return 0;
         }
-        printf("Extracted: %d\n", (int)tmp);
+        printf("PID %d Extracted: %d\n", pid, (int)tmp);
         if (tmp == minsorted[i]) {
-            printf(GRN "Results Matched\n" RESET);
+            printf(GRN "PID %d Results Matched\n" RESET, pid);
         }
         else {
-            printf(RED "ERROR! Results Do Not Match. Expected %d, Found %d\n" RESET, (int)minsorted[i], (int)tmp);
+            printf(RED "PID %d ERROR! Results Do Not Match. Expected %d, Found %d\n" RESET, pid, (int)minsorted[i], (int)tmp);
         }
     }
 
@@ -129,11 +134,11 @@ int main(int argc, char *argv[]) {
     fd = open(procfile, O_RDWR) ;
 
     if (fd < 0) {
-        perror("Could not open flie /proc/ass1");
+        perror("PID %d Could not open flie /proc/ass1");
         return 0;
     }
     // Initialize min heap =============================================
-    printf("==== Initializing Max Heap ====\n");
+    printf("PID %d ==== Initializing Max Heap ====\n");
     // max heap
     buf[0] = 0xF0;
     // size of the heap
@@ -141,37 +146,37 @@ int main(int argc, char *argv[]) {
 
     result = write(fd, buf, 2);
     if (result < 0) {
-        perror("Write failed");
+        perror("PID %d Write failed");
         close(fd);
         return 0;
     }
-    printf("Written %d bytes\n", result);
+    printf("PID %d Written %d bytes\n", result);
 
-    printf("======= Test Max Heap =========\n");
+    printf("PID %d ======= Test Max Heap =========\n");
     // Insert --------------------------------------------------------
     for (int i = 0; i < 10; i++)
     {
-        printf("Inserting %d\n", val[i]);
+        printf("PID %d Inserting %d\n", val[i]);
         result = write(fd, &val[i], sizeof(int32_t));
         if (result < 0) {
-            perror("ERROR! Write failed");
+            perror("PID %d ERROR! Write failed");
             close(fd);
             return 0;
         }
-        printf("Written %d bytes\n", result);
+        printf("PID %d Written %d bytes\n", result);
     }
 
     // Verify ---------------------------------------------------------
     for (int i = 0; i < 10; i++)
     {
-        printf("Extracting..\n");
+        printf("PID %d Extracting..\n");
         result = read(fd, (void *)(&tmp), sizeof(int32_t));
         if (result < 0) {
-            perror("ERROR! Read failed");
+            perror("PID %d ERROR! Read failed");
             close(fd);
             return 0;
         }
-        printf("Extracted: %d\n", (int)tmp);
+        printf("PID %d Extracted: %d\n", (int)tmp);
         if (tmp == maxsorted[i]) {
             printf(GRN "Results Matched\n" RESET);
         }

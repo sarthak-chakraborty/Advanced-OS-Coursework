@@ -304,14 +304,14 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		ret = insert(entry->global_heap, num);
 		// mutex_unlock(&heap_mutex);
 		if (ret < 0) { // Heap is filled to capacity
-			return -1;
+			return -EACCES;
 		}
 		return sizeof(num);
 	}
 
-	if (buffer_len != 2) {
+	if (buffer_len != 2) { // any other call before the heap has been initialized
 		// mutex_unlock(&heap_mutex);
-		return -EINVAL;
+		return -EACCES;
 	}
 
 
@@ -357,7 +357,7 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	}
 	args_set = (entry->global_heap) ? 1 : 0;
 
-	if (args_set == 0) {
+	if (args_set == 0) { // heap hasn't been initialized yet
 		return -EACCES;
 	}
 	topnode = PopMin(entry->global_heap);
@@ -369,9 +369,9 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 		return sizeof(topnode);
 	}
 	else {
-		printk(KERN_INFO DEVICE_NAME ": PID %d Failed to send %d chars to the user\n", current->pid, retval);
+		printk(KERN_INFO DEVICE_NAME ": PID %d Failed to send retval : %d, topnode is %d\n", current->pid, retval, topnode);
 		// mutex_unlock(&heap_mutex);
-		return -1;      // Failed -- return a bad address message (i.e. -14)
+		return -EACCES;      // Failed -- return a bad address message (i.e. -14)
 	}
 }
 
