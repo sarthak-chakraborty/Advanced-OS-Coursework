@@ -19,9 +19,46 @@ int main(int argc, char *argv[]) {
     strcat(procfile, DEVICE_NAME);
 
     int pid = fork();
-    // if (pid == 0) {
-    //     sleep(1);
-    // }
+
+    /*
+    int32_t tmp;
+    int32_t val[10] = {9, 3, 6, 4, 2, 5, 2, 12, 15, 7};
+    int32_t minsorted[10] = {2, 2, 3, 4, 5, 6, 7, 9, 12, 15};
+    int32_t maxsorted[10] = {15, 12, 9, 7, 6, 5, 4, 3, 2, 2};
+    */
+
+    int32_t tmp;
+    int32_t val[10];
+    int32_t minsorted[10];
+    int32_t maxsorted[10];
+
+
+    if (pid == 0) {
+        val[0] = 9;
+        val[1] = 3;
+        val[2] = 6;
+        val[3] = 4;
+        val[4] = 2;
+
+        minsorted[0] = 2;
+        minsorted[1] = 3;
+        minsorted[2] = 4;
+        minsorted[3] = 6;
+        minsorted[4] = 9;
+    }
+    else{
+        val[0] = 19;
+        val[1] = 13;
+        val[2] = 16;
+        val[3] = 14;
+        val[4] = 12;
+
+        minsorted[0] = 12;
+        minsorted[1] = 13;
+        minsorted[2] = 14;
+        minsorted[3] = 16;
+        minsorted[4] = 19;
+    }
 
     int fd = open(procfile, O_RDWR) ;
 
@@ -47,16 +84,12 @@ int main(int argc, char *argv[]) {
     printf("Written %d bytes\n", result);
 
 
-    int32_t tmp;
-    int32_t val[10] = {9, 3, 6, 4, 2, 5, 2, 12, 15, 7};
-    int32_t minsorted[10] = {2, 2, 3, 4, 5, 6, 7, 9, 12, 15};
-    int32_t maxsorted[10] = {15, 12, 9, 7, 6, 5, 4, 3, 2, 2};
 
     // Test Min Heap ====================================================
     printf("======= Test Min Heap =========\n");
 
     // // Insert --------------------------------------------------------
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 5; i++)
     {
         printf("Inserting %d\n", val[i]);
         result = write(fd, &val[i], sizeof(int32_t));
@@ -67,10 +100,10 @@ int main(int argc, char *argv[]) {
         }
         printf("Written %d bytes\n", result);
     }
-    int fd1 = open(procfile, O_RDWR) ;
-    printf("Received this when tried to open it twice %d\n", fd1);
+    // int fd1 = open(procfile, O_RDWR) ;
+    //printf("Received this when tried to open it twice %d\n", fd1);
     // Verify ---------------------------------------------------------
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 5; i++)
     {
         printf("Extracting..\n");
         result = read(fd, (void *)(&tmp), sizeof(int32_t));
@@ -91,6 +124,7 @@ int main(int argc, char *argv[]) {
     close(fd);
 
 
+    /*
     // Test Max Heap ====================================================
     fd = open(procfile, O_RDWR) ;
 
@@ -146,6 +180,7 @@ int main(int argc, char *argv[]) {
         }
     }
     close(fd);
+    */
 
     return 0;
 }

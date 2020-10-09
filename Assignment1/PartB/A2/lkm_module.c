@@ -11,7 +11,6 @@
 #define DEVICE_NAME "partb_2_16CS30044"
 #define INF  (0xffffffff)
 #define current get_current()
-
 const char MIN_HEAP = 0xFF, MAX_HEAP = 0xF0;
 
 #define PB2_SET_TYPE _IOW(0x10, 0x31, int32_t*)
@@ -20,8 +19,6 @@ const char MIN_HEAP = 0xFF, MAX_HEAP = 0xF0;
 #define PB2_EXTRACT _IOR(0x10, 0x34, int32_t*)
 
 MODULE_LICENSE("GPL");
-
-//DEFINE_HASHTABLE(htable, 5);
 static DEFINE_MUTEX(heap_mutex);
 
 static struct pb2_set_type_arguments {
@@ -50,20 +47,16 @@ static struct Heap {
 };
 typedef struct Heap Heap;
 
-/*
 static struct h_struct {
 	int key;
 	Heap* global_heap;
-     	struct hlist_node node;
+	struct h_struct* next;
 };
-*/
+struct h_struct *htable, *entry;
+
 
 /* Function Prototypes */
-/* Heap methods
-*/
-// static long initialize_user_heap();
-// static long insert_into_user_heap();
-// static long pop_from_user_heap();
+/* Heap methods */
 static Heap* CreateHeap(int32_t capacity, int32_t heap_type);
 static Heap* DestroyHeap(Heap* heap);
 static int32_t insert(Heap *h, int32_t key);
@@ -71,13 +64,19 @@ static void heapify_bottom_top(Heap *h, int32_t index);
 static void heapify_top_bottom(Heap *h, int32_t parent_node);
 static int32_t PopMin(Heap *h);
 
+static struct h_struct* get_entry_from_key(int key);
+static void key_add(struct h_struct*);
+static void DestroyHashTable(void);
+static void key_del(int key);
+static void print_key(void);
+
 static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static int     dev_open(struct inode *, struct file *);
 static int     dev_release(struct inode *, struct file *);
 static ssize_t dev_read(struct file *, char *, size_t, loff_t *);
 static ssize_t dev_write(struct file *, const char *, size_t, loff_t *);
 
-struct task_struct* accessor = NULL;
+
 static int    numberOpens = 0;
 static char buffer[256] = {0};
 static int buffer_len = 0;
@@ -86,9 +85,7 @@ static int args_set = 0;
 static int retval = -1;
 static struct pb2_set_type_arguments pb2_args;
 static struct obj_info heap;
-static Heap* global_heap;
 
-// static struct file_operations file_ops;
 static struct file_operations file_ops =
 {
 	.owner = THIS_MODULE,
@@ -99,8 +96,71 @@ static struct file_operations file_ops =
 	.unlocked_ioctl = dev_ioctl,
 };
 
+
+static void key_add(struct h_struct* entry) {
+	entry->next = htable->next;
+	htable->next = entry;
+}
+
+
+static struct h_struct* get_entry_from_key(int key) {
+	struct h_struct* temp = htable;
+	while (temp != NULL) {
+		if (temp->key == key) {
+			return temp;
+		}
+		temp = temp->next;
+	}
+	return NULL;
+}
+
+
+static void key_del(int key) {
+	struct h_struct *prev, *temp;
+	prev = temp = htable;
+	temp = temp->next;
+	
+	while (temp != NULL) {
+		if (temp->key == key) {
+			prev->next = temp->next;
+			temp->global_heap = DestroyHeap(temp->global_heap);
+			temp->next = NULL;
+			printk("<key_del> Kfree key = %d", temp->key);
+			kfree(temp);
+			break;
+		}
+		prev = temp;
+		temp = temp->next;
+	}
+
+}
+
+
+static void print_key(void){
+	struct h_struct *temp;
+	temp = htable->next;
+	while (temp != NULL) {
+		printk("<print_key> key = %d", temp->key);
+		temp = temp->next;
+	}
+}
+
+
+static void DestroyHashTable(void) {
+	struct h_struct *temp, *temp2;
+	temp = htable->next;
+	htable->next = NULL;
+	while (temp != NULL) {
+		temp2 = temp;
+		printk("<DestroyHashTable> Kfree key = %d", temp->key);
+		temp = temp->next;
+		kfree(temp2);
+	}
+	kfree(htable);
+}
+
+
 static Heap *CreateHeap(int32_t capacity, int32_t heap_type) {
-	// using void * kmalloc_array(size_t n, size_t size, gfp_t flags)
 	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_KERNEL); //one is number of heap
 
 	//check if memory allocation is fails
@@ -122,6 +182,7 @@ static Heap *CreateHeap(int32_t capacity, int32_t heap_type) {
 	return h;
 }
 
+
 static Heap* DestroyHeap(Heap* heap) {
 	if (heap == NULL)
 		return -1; // heap is not allocated
@@ -131,6 +192,7 @@ static Heap* DestroyHeap(Heap* heap) {
 	args_set = 0;
 	return 0;
 }
+
 
 static int32_t insert(Heap *h, int32_t key) {
 	if ( h->count < h->capacity) {
@@ -144,6 +206,7 @@ static int32_t insert(Heap *h, int32_t key) {
 	}
 	return 0;
 }
+
 
 static void heapify_bottom_top(Heap *h, int32_t index) {
 	int32_t temp;
@@ -171,6 +234,7 @@ static void heapify_bottom_top(Heap *h, int32_t index) {
 		}
 	}
 }
+
 
 static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	int32_t left = parent_node * 2 + 1;
@@ -253,8 +317,20 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		return -EINVAL;
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
-	
-	
+
+	// if (!mutex_trylock(&heap_mutex)) {
+	// 	printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
+	// 	return -EBUSY;
+	// }
+
+	entry = get_entry_from_key(current->pid);
+	if (entry == NULL) {
+		printk(KERN_ALERT DEVICE_NAME ": RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+		// mutex_unlock(&heap_mutex);
+		return -EACCES;
+	}
+
+	args_set = (entry->global_heap) ? 1 : 0;
 	buffer_len = count < 256 ? count : 256;
 
 	printk(KERN_INFO DEVICE_NAME ": %.*s", (int)count, buf);
@@ -262,6 +338,7 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 
 	if (buffer_len != 2 && buffer_len != 4) {
 		printk(KERN_ALERT DEVICE_NAME ": WRONG DATA SENT. %d bytes", buffer_len);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 	if (args_set) {
@@ -269,38 +346,44 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		memcpy(&num, buffer, sizeof(num));
 		printk(DEVICE_NAME ": num: %d\n", num);
 		int32_t ret;
-		ret = insert(global_heap, num);
-		if (ret < 0) // Heap is filled to capacity
+		ret = insert(entry->global_heap, num);
+		// mutex_unlock(&heap_mutex);
+		if (ret < 0) { // Heap is filled to capacity
 			return -1;
+		}
 		return sizeof(num);
 	}
 
-	if (buffer_len != 2)
+	if (buffer_len != 2) {
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
+	}
+
 	char heap_type;
 	int32_t heap_size;
-
 	heap_type = buf[0];
 	heap_size = buf[1];
 	printk(DEVICE_NAME ": HEAP TYPE: %d", heap_type);
 	printk(DEVICE_NAME ": HEAP SIZE: %d", heap_size);
-	printk(DEVICE_NAME ": RECIEVED:  %d bytes", count);
+	printk(DEVICE_NAME ": RECIEVED:  %ld bytes", count);
 
 	if (heap_type != MIN_HEAP && heap_type != MAX_HEAP) {
 		printk(KERN_ALERT DEVICE_NAME ": Wrong type!! %c\n", heap_type);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 
 	if (heap_size <= 0 || heap_size > 100) {
 		printk(KERN_ALERT DEVICE_NAME ": Wrong size of heap %d!!\n", heap_size);
+		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
-	
-	global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
-	global_heap = CreateHeap(heap_size, heap_type); // allocating space for new heap
 
-	
+	entry->global_heap = DestroyHeap(entry->global_heap);	// destroy any existing heap before creating a new one
+	entry->global_heap = CreateHeap(heap_size, heap_type);	// allocating space for new heap
+
 	args_set = 1;
+	// mutex_unlock(&heap_mutex);
 	return buffer_len;
 }
 
@@ -308,86 +391,69 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos) {
 	if (!buf || !count)
 		return -EINVAL;
-
 	if (args_set == 0)
 		return -EACCES;
-	
-	
-	
+
+	// if (!mutex_trylock(&heap_mutex)) {
+	// 	printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
+	// 	return -EBUSY;
+	// }
+	entry = get_entry_from_key(current->pid);
+	if (entry == NULL) {
+		printk(KERN_ALERT DEVICE_NAME "RAISED ERROR in dev_read entry is non-existent");
+		// mutex_unlock(&heap_mutex);
+		return -EACCES;
+	}
+	args_set = (entry->global_heap) ? 1 : 0;
 	int32_t topnode;
-	topnode = PopMin(global_heap);
-	retval = copy_to_user(buf, (int32_t*)&topnode, sizeof(topnode));
+	topnode = PopMin(entry->global_heap);
+	retval = copy_to_user(buf, (int32_t*)&topnode, count < sizeof(topnode) ? count : sizeof(topnode));
 
 	if (retval == 0 && topnode != -INF) {    // success!
 		printk(KERN_INFO DEVICE_NAME ": Sent %ld characters to the user\n", sizeof(topnode));
+		// mutex_unlock(&heap_mutex);
 		return sizeof(topnode);
 	}
 	else {
 		printk(KERN_INFO DEVICE_NAME ": Failed to send %d characters to the user\n", retval);
+		// mutex_unlock(&heap_mutex);
 		return -1;      // Failed -- return a bad address message (i.e. -14)
 	}
 }
 
 
 static int dev_open(struct inode *inodep, struct file *filep) {
-	/*
-	if(!mutex_trylock(&heap_mutex)){
-                printk(KERN_ALERT DEVICE_NAME "Device is in Use");
-                return -EBUSY;
-        }
-
-	printk(KERN_ALERT "Here1");
-	
-	struct h_struct *member = NULL;
-	hash_for_each_possible(htable, member, node, current->pid);
-	printk(KERN_ALERT "Here2");
-	if(member != NULL){
-		if(member->key == current->pid){
-			printk(KERN_ALERT DEVICE_NAME "Device is already in use by same process");
-			return -EBUSY;
-		}
+	if (get_entry_from_key(current->pid) != NULL) {
+		printk(KERN_ALERT DEVICE_NAME ": PID %d, Tried to open twice\n", current->pid);
+		return -EACCES;
 	}
-	struct h_struct entry = 
-	{
-		.key = current->pid,
-		.global_heap = NULL,
-		.node = 0,
-	};
-	printk(KERN_ALERT "Here3");
-	hash_add(htable, &entry.node, entry.key);
-	printk(KERN_ALERT "Here4");
-	mutex_unlock(&heap_mutex);
-	//kfree(member);
-	*/
+
+	entry = kmalloc(sizeof(struct h_struct), GFP_KERNEL);
+	*entry = (struct h_struct) {current->pid, NULL, NULL};
+	if (!mutex_trylock(&heap_mutex)) {
+		printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_open>");
+		return -EBUSY;
+	}
+	printk(DEVICE_NAME ": !!!! Adding current->pid %d\n", entry->key);
+	key_add(entry);
+
 	numberOpens++;
-	printk(KERN_INFO DEVICE_NAME "Device has been opened %d time(s)\n", numberOpens);
+	printk(KERN_INFO DEVICE_NAME ": Device has been opened %d time(s)\n", numberOpens);
+	print_key();
+	mutex_unlock(&heap_mutex);
 	return 0;
 }
 
 
 static int dev_release(struct inode *inodep, struct file *filep) {
-	/*
-	if(!mutex_trylock(&heap_mutex)){
-                printk(KERN_ALERT DEVICE_NAME "Device is in Use");
-                return -EBUSY;
-        }
-
-        struct h_struct *member = NULL;
-        hash_for_each_possible(htable, member, node, current->pid);
-	if(member != NULL){
-        	if(member->key == current->pid){
-
-			printk(KERN_ALERT DEVICE_NAME "Entry removed from hash table");
-			member->global_heap = DestroyHeap(member->global_heap);
-			kfree(member->global_heap);
-                	hash_del(&member->node);
-        	}
+	if (!mutex_trylock(&heap_mutex)) {
+		printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_release>. PID %d", current->pid);
+		return -EBUSY;
 	}
-	*/
-	global_heap = DestroyHeap(global_heap);
-	//mutex_unlock(&heap_mutex);
-	//kfree(member);
-	printk(KERN_INFO DEVICE_NAME "Device successfully closed\n");
+	key_del(current->pid);
+	printk(KERN_INFO DEVICE_NAME ": Device successfully closed\n");
+	print_key();
+	mutex_unlock(&heap_mutex);
 	return 0;
 }
 
@@ -396,28 +462,31 @@ static int hello_init(void) {
 	struct proc_dir_entry *entry = proc_create(DEVICE_NAME, 0, NULL, &file_ops);
 	if (!entry)
 		return -ENOENT;
-	
-	global_heap = NULL;
+	htable = kmalloc(sizeof(struct h_struct), GFP_KERNEL);
+	*htable = (struct h_struct) { -1, NULL, NULL};
 	printk(KERN_ALERT DEVICE_NAME ": Hello world\n");
-	mutex_init(&heap_mutex);
-       	//hash_init(htable);	
+	mutex_init(&heap_mutex);	
 	return 0;
 }
 
 static void hello_exit(void) {
 	mutex_destroy(&heap_mutex);
+	DestroyHashTable();
 	remove_proc_entry(DEVICE_NAME, NULL);
 
 	printk(KERN_ALERT DEVICE_NAME "Goodbye\n");
 }
 
 static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	struct h_struct *member;
-
 	switch (cmd) {
 	case PB2_SET_TYPE:
 		;
-		printk(KERN_ALERT DEVICE_NAME " pid: %d", current->pid);
+		entry = get_entry_from_key(current->pid);
+		if (entry == NULL) {
+			printk(KERN_ALERT DEVICE_NAME ": RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+			// mutex_unlock(&heap_mutex);
+			return -EACCES;
+		}
 		
 		retval = copy_from_user(&pb2_args, (struct pb2_set_type_arguments *)arg, sizeof(pb2_args));
 		if (retval)
@@ -430,8 +499,8 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			return -EINVAL;
 		
 
-		global_heap = DestroyHeap(global_heap); // destroy any existing heap before creating a new one
-		global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new space
+		entry->global_heap = DestroyHeap(entry->global_heap); // destroy any existing heap before creating a new one
+		entry->global_heap = CreateHeap(pb2_args.heap_size, pb2_args.heap_type); // allocating space for new space
 
 		args_set = 1;
 		break;
@@ -443,8 +512,15 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			return -EACCES;
 		}
 
+		entry = get_entry_from_key(current->pid);
+		if (entry == NULL) {
+			printk(KERN_ALERT DEVICE_NAME ": RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+			// mutex_unlock(&heap_mutex);
+			return -EACCES;
+		}
+
 		// If heap is full, return EACCESS
-		if (global_heap->count >= global_heap->capacity)
+		if (entry->global_heap->count >= entry->global_heap->capacity)
 			return -EACCES;
 
 		retval = copy_from_user(&num, (int *)arg, sizeof(int));
@@ -452,7 +528,7 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			return -EINVAL;
 
 		printk(KERN_INFO DEVICE_NAME "Number to be inserted in Heap: %d\n", num);
-		insert(global_heap, num);
+		insert(entry->global_heap, num);
 		break;
 
 	case PB2_GET_INFO:
@@ -461,10 +537,17 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			return -EACCES;
 		}
 
+		entry = get_entry_from_key(current->pid);
+		if (entry == NULL) {
+			printk(KERN_ALERT DEVICE_NAME ": RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+			// mutex_unlock(&heap_mutex);
+			return -EACCES;
+		}
+
 		heap.heap_type = pb2_args.heap_type;
-		heap.heap_size = global_heap->count;
-		heap.root = top(global_heap);
-		heap.last_inserted = global_heap->last_inserted;
+		heap.heap_size = entry->global_heap->count;
+		heap.root = top(entry->global_heap);
+		heap.last_inserted = entry->global_heap->last_inserted;
 
 		retval = copy_to_user((struct obj_info *)arg, &heap, sizeof(struct obj_info));
 		if (retval)
@@ -476,11 +559,18 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			printk(KERN_ALERT DEVICE_NAME "Heap not initialized");
 			return -EACCES;
 		}
+
+		entry = get_entry_from_key(current->pid);
+		if (entry == NULL) {
+			printk(KERN_ALERT DEVICE_NAME ": RAISED ERROR in dev_write entry is non-existent %d", current->pid);
+			// mutex_unlock(&heap_mutex);
+			return -EACCES;
+		}
 		
 		struct result res =
 		{
-			.result = PopMin(global_heap),
-			.heap_size = global_heap->count,
+			.result = PopMin(entry->global_heap),
+			.heap_size = entry->global_heap->count,
 		};
 
 		retval = copy_to_user((struct result *)arg, &res, sizeof(struct result));
