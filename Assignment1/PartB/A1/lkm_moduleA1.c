@@ -161,7 +161,6 @@ static Heap* DestroyHeap(Heap* heap) {
 	printk(KERN_INFO DEVICE_NAME ": PID %d, %ld bytes of heap->arr Space freed.\n", current->pid, sizeof(heap->arr));
 	kfree_const(heap->arr);
 	kfree_const(heap);
-	args_set = 0;
 	return NULL;
 }
 
@@ -337,7 +336,6 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	entry->global_heap = DestroyHeap(entry->global_heap);	// destroy any existing heap before creating a new one
 	entry->global_heap = CreateHeap(heap_size, heap_type);	// allocating space for new heap
 
-	args_set = 1;
 	// mutex_unlock(&heap_mutex);
 	return buffer_len;
 }
@@ -346,11 +344,9 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos) {
 	if (!buf || !count)
 		return -EINVAL;
-	if (args_set == 0)
-		return -EACCES;
 
 	// if (!mutex_trylock(&heap_mutex)) {
-	// 	printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
+	// 	printk(KERN_ALERT DEVICE_NAME "PID %d Device is in Use <dev_read>", current->pid);
 	// 	return -EBUSY;
 	// }
 	entry = get_entry_from_key(current->pid);
@@ -361,6 +357,9 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	}
 	args_set = (entry->global_heap) ? 1 : 0;
 
+	if (args_set == 0) {
+		return -EACCES;
+	}
 	topnode = PopMin(entry->global_heap);
 	retval = copy_to_user(buf, (int32_t*)&topnode, count < sizeof(topnode) ? count : sizeof(topnode));
 
