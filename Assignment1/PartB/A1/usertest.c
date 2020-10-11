@@ -18,8 +18,9 @@ int main(int argc, char *argv[]) {
     // strcat(procfile, argv[1]);
     strcat(procfile, DEVICE_NAME);
 
-    int pid = fork();
-    fork(); fork();
+    int pid;
+    // pid = fork();
+    // fork(); fork();
 
     /*
     int32_t tmp;
@@ -92,12 +93,20 @@ int main(int argc, char *argv[]) {
     printf("PID %d ======= Test Min Heap =========\n", pid);
 
     // // Insert --------------------------------------------------------
+    double f = 2.5;
     for (int i = 0; i < 5; i++)
     {
         printf("PID %d Inserting %d\n", pid, val[i]);
-        result = write(fd, &val[i], sizeof(int32_t));
+        char buf[10] = "AAAAA";
+        buf[0] = 1; buf[1] = 2;
+        char x = '2';
+        // result = write(fd, &f, sizeof(f));
+        printf("float %ld \n", sizeof(f));
+        result = write(fd, buf, i < 1 ? 1 : i);
+        // result = write(fd, &x, 1);
+        // result = write(fd, &val[i], sizeof(int32_t));
         if (result < 0) {
-            printf("PID %d :: ", pid);
+            printf("PID %d :: error is %d", pid, result);
             perror("ERROR! Write failed");
             close(fd);
             return 0;

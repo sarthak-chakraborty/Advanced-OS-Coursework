@@ -1,3 +1,12 @@
+/*
+PART B: Assignment 1
+------------------------------------------
+Sankalp R. 16CS30031
+Sarthak Charkraborty 16CS30044
+------------------------------------------
+Kernel Version used : 5.4.0-48-generic
+System : Ubuntu 18.04 LTS
+*/
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
@@ -273,41 +282,37 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
 
-	// if (!mutex_trylock(&heap_mutex)) {
-	// 	printk(KERN_ALERT DEVICE_NAME "Device is in Use <dev_read>");
-	// 	return -EBUSY;
-	// }
 
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d RAISED ERROR in dev_write entry is non-existent", current->pid);
-		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
 
 	args_set = (entry->global_heap) ? 1 : 0;
 	buffer_len = count < 256 ? count : 256;
 
-	if (buffer_len != 2 && buffer_len != 4) {
-		printk(KERN_ALERT DEVICE_NAME ": PID %d WRONG DATA SENT. %d bytes", current->pid, buffer_len);
-		// mutex_unlock(&heap_mutex);
-		return -EINVAL;
-	}
 
 	if (args_set) {
-		memcpy(&num, buffer, sizeof(num));
+		if (count > 4 || count == 0) {
+			printk(KERN_ALERT DEVICE_NAME ": PID %d WRONG DATA SENT. %d bytes", current->pid, buffer_len);
+			return -EINVAL;
+		}
+		char arr[4];
+		memset(arr, 0, 4 * sizeof(char));
+		memcpy(arr, buf, count * sizeof(char));
+		memcpy(&num, arr, sizeof(num));
 		printk(DEVICE_NAME ": PID %d writing %d to heap\n", current->pid, num);
 
 		ret = insert(entry->global_heap, num);
-		// mutex_unlock(&heap_mutex);
 		if (ret < 0) { // Heap is filled to capacity
 			return -EACCES;
 		}
 		return sizeof(num);
 	}
 
+
 	if (buffer_len != 2) { // any other call before the heap has been initialized
-		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
 
@@ -320,20 +325,17 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 
 	if (heap_type != MIN_HEAP && heap_type != MAX_HEAP) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d Wrong Heap type sent!! %c\n", current->pid, heap_type);
-		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 
 	if (heap_size <= 0 || heap_size > 100) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d Wrong size of heap %d!!\n", current->pid, heap_size);
-		// mutex_unlock(&heap_mutex);
 		return -EINVAL;
 	}
 
 	entry->global_heap = DestroyHeap(entry->global_heap);	// destroy any existing heap before creating a new one
 	entry->global_heap = CreateHeap(heap_size, heap_type);	// allocating space for new heap
 
-	// mutex_unlock(&heap_mutex);
 	return buffer_len;
 }
 
@@ -342,33 +344,28 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	if (!buf || !count)
 		return -EINVAL;
 
-	// if (!mutex_trylock(&heap_mutex)) {
-	// 	printk(KERN_ALERT DEVICE_NAME "PID %d Device is in Use <dev_read>", current->pid);
-	// 	return -EBUSY;
-	// }
+
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
 		printk(KERN_ALERT DEVICE_NAME "PID %d RAISED ERROR in dev_read entry is non-existent", current->pid);
-		// mutex_unlock(&heap_mutex);
 		return -EACCES;
 	}
 	args_set = (entry->global_heap) ? 1 : 0;
 
 	if (args_set == 0) { // heap hasn't been initialized yet
-		printk(KERN_ALERT DEVICE_NAME " : PID %d Heap not initialized",current->pid);
+		printk(KERN_ALERT DEVICE_NAME ": PID %d Heap not initialized", current->pid);
 		return -EACCES;
 	}
 	topnode = PopMin(entry->global_heap);
+	printk(DEVICE_NAME ": PID %d asking for %ld bytes\n", current->pid, count);
 	retval = copy_to_user(buf, (int32_t*)&topnode, count < sizeof(topnode) ? count : sizeof(topnode));
 
 	if (retval == 0 && topnode != -INF) {    // success!
 		printk(KERN_INFO DEVICE_NAME ": PID %d Sent %ld chars with value %d to the user\n", current->pid, sizeof(topnode), topnode);
-		// mutex_unlock(&heap_mutex);
 		return sizeof(topnode);
 	}
 	else {
 		printk(KERN_INFO DEVICE_NAME ": PID %d Failed to send retval : %d, topnode is %d\n", current->pid, retval, topnode);
-		// mutex_unlock(&heap_mutex);
 		return -EACCES;      // Failed -- return a bad address message (i.e. -14)
 	}
 }
