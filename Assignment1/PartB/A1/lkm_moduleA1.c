@@ -47,6 +47,7 @@ static void heapify_bottom_top(Heap *h, int32_t index);
 static void heapify_top_bottom(Heap *h, int32_t parent_node);
 static int32_t PopMin(Heap *h);
 
+/* Concurrency Control Methods */
 static struct h_struct* get_entry_from_key(int key);
 static void key_add(struct h_struct*);
 static void DestroyHashTable(void);
@@ -78,13 +79,13 @@ static struct file_operations file_ops =
 	.release = dev_release,
 };
 
-
+/* Add a new process with pid to the linked list */
 static void key_add(struct h_struct* entry) {
 	entry->next = htable->next;
 	htable->next = entry;
 }
 
-
+/* Return a process with a specific pic */
 static struct h_struct* get_entry_from_key(int key) {
 	struct h_struct* temp = htable->next;
 	while (temp != NULL) {
@@ -96,7 +97,7 @@ static struct h_struct* get_entry_from_key(int key) {
 	return NULL;
 }
 
-
+/* Deletes a process entry */
 static void key_del(int key) {
 	struct h_struct *prev, *temp;
 	prev = temp = htable;
@@ -117,7 +118,7 @@ static void key_del(int key) {
 
 }
 
-
+/* Prints all the process pid */
 static void print_key(void) {
 	struct h_struct *temp;
 	temp = htable->next;
@@ -127,7 +128,7 @@ static void print_key(void) {
 	}
 }
 
-
+/* Destroy Linked List of porcesses */
 static void DestroyHashTable(void) {
 	struct h_struct *temp, *temp2;
 	temp = htable->next;
@@ -141,9 +142,9 @@ static void DestroyHashTable(void) {
 	kfree(htable);
 }
 
-
+/* Create Heap */
 static Heap *CreateHeap(int32_t capacity, char heap_type) {
-	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_KERNEL); //one is number of heap
+	Heap *h = (Heap * ) kmalloc(sizeof(Heap), GFP_KERNEL);
 
 	//check if memory allocation is fails
 	if (h == NULL) {
@@ -163,7 +164,7 @@ static Heap *CreateHeap(int32_t capacity, char heap_type) {
 	return h;
 }
 
-
+/* Destroy Heap */
 static Heap* DestroyHeap(Heap* heap) {
 	if (heap == NULL)
 		return NULL; // heap is not allocated
@@ -173,7 +174,7 @@ static Heap* DestroyHeap(Heap* heap) {
 	return NULL;
 }
 
-
+/* Insert a number into heap */
 static int32_t insert(Heap *h, int32_t key) {
 	if ( h->count < h->capacity) {
 		h->arr[h->count] = key;
@@ -182,12 +183,12 @@ static int32_t insert(Heap *h, int32_t key) {
 		h->last_inserted = key;
 	}
 	else {
-		return -EACCES;
+		return -EACCES;  // Number of elements exceeded the capacity
 	}
 	return 0;
 }
 
-
+/* Heapify while inserting */
 static void heapify_bottom_top(Heap *h, int32_t index) {
 	int32_t temp;
 	int32_t parent_node = (index - 1) / 2;
@@ -212,7 +213,7 @@ static void heapify_bottom_top(Heap *h, int32_t index) {
 	}
 }
 
-
+/* Heapify while deleting */
 static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	int32_t left = parent_node * 2 + 1;
 	int32_t right = parent_node * 2 + 2;
@@ -261,7 +262,7 @@ static void heapify_top_bottom(Heap *h, int32_t parent_node) {
 	}
 }
 
-
+/* Extract the top node of a heap */
 static int32_t PopMin(Heap *h) {
 	int32_t pop;
 	if (h->count == 0) {
@@ -282,22 +283,23 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 	if (copy_from_user(buffer, buf, count < 256 ? count : 256))
 		return -ENOBUFS;
 
-
+	// Get the process corresponing heap
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d RAISED ERROR in dev_write entry is non-existent", current->pid);
 		return -EACCES;
 	}
-
+	// Args Set = 1 if the heap is initialized(not NULL)
 	args_set = (entry->global_heap) ? 1 : 0;
 	buffer_len = count < 256 ? count : 256;
 
-
+	// If heap is initialized
 	if (args_set) {
 		if (count > 4 || count == 0) {
 			printk(KERN_ALERT DEVICE_NAME ": PID %d WRONG DATA SENT. %d bytes", current->pid, buffer_len);
 			return -EINVAL;
 		}
+		// Check for unexpected type
 		char arr[4];
 		memset(arr, 0, 4 * sizeof(char));
 		memcpy(arr, buf, count * sizeof(char));
@@ -311,12 +313,12 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 		return sizeof(num);
 	}
 
-
-	if (buffer_len != 2) { // any other call before the heap has been initialized
+	 // Any other call before the heap has been initialized
+	if (buffer_len != 2) {
 		return -EACCES;
 	}
 
-
+	// Initlize Heap
 	heap_type = buf[0];
 	heap_size = buf[1];
 	printk(DEVICE_NAME ": PID %d HEAP TYPE: %d", current->pid, heap_type);
@@ -344,18 +346,22 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 	if (!buf || !count)
 		return -EINVAL;
 
-
+	// Get the process corresponing heap
 	entry = get_entry_from_key(current->pid);
 	if (entry == NULL) {
 		printk(KERN_ALERT DEVICE_NAME "PID %d RAISED ERROR in dev_read entry is non-existent", current->pid);
 		return -EACCES;
 	}
+	// Args Set = 1 if the heap is initialized(not NULL)
 	args_set = (entry->global_heap) ? 1 : 0;
 
-	if (args_set == 0) { // heap hasn't been initialized yet
+	 // If heap is not initialized
+	if (args_set == 0) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d Heap not initialized", current->pid);
 		return -EACCES;
 	}
+
+	// Extract the topmost node of heap
 	topnode = PopMin(entry->global_heap);
 	printk(DEVICE_NAME ": PID %d asking for %ld bytes\n", current->pid, count);
 	retval = copy_to_user(buf, (int32_t*)&topnode, count < sizeof(topnode) ? count : sizeof(topnode));
@@ -372,11 +378,13 @@ static ssize_t dev_read(struct file *file, char* buf, size_t count, loff_t* pos)
 
 
 static int dev_open(struct inode *inodep, struct file *filep) {
+	// If same process has already opened the file
 	if (get_entry_from_key(current->pid) != NULL) {
 		printk(KERN_ALERT DEVICE_NAME ": PID %d, Tried to open twice\n", current->pid);
 		return -EACCES;
 	}
 
+	// Create a new entry to the process linked list
 	entry = kmalloc(sizeof(struct h_struct), GFP_KERNEL);
 	*entry = (struct h_struct) {current->pid, NULL, NULL};
 	if (!mutex_trylock(&heap_mutex)) {
@@ -399,6 +407,7 @@ static int dev_release(struct inode *inodep, struct file *filep) {
 		printk(KERN_ALERT DEVICE_NAME "PID %d Device is in Use <dev_release>.", current->pid);
 		return -EBUSY;
 	}
+	// Delete the process entry from the process linked list
 	key_del(current->pid);
 	printk(KERN_INFO DEVICE_NAME ": PID %d Device successfully closed\n", current->pid);
 	print_key();

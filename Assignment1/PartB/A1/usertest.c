@@ -19,8 +19,8 @@ int main(int argc, char *argv[]) {
     strcat(procfile, DEVICE_NAME);
 
     int pid;
-    // pid = fork();
-    // fork(); fork();
+    pid = fork();
+    fork(); fork();
 
     /*
     int32_t tmp;
@@ -93,10 +93,10 @@ int main(int argc, char *argv[]) {
     printf("PID %d ======= Test Min Heap =========\n", pid);
 
     // // Insert --------------------------------------------------------
-    double f = 2.5;
     for (int i = 0; i < 5; i++)
     {
         printf("PID %d Inserting %d\n", pid, val[i]);
+        /*
         char buf[10] = "AAAAA";
         buf[0] = 1; buf[1] = 2;
         char x = '2';
@@ -104,10 +104,11 @@ int main(int argc, char *argv[]) {
         printf("float %ld \n", sizeof(f));
         result = write(fd, buf, i < 1 ? 1 : i);
         // result = write(fd, &x, 1);
-        // result = write(fd, &val[i], sizeof(int32_t));
+        */
+        result = write(fd, &val[i], sizeof(int32_t));
         if (result < 0) {
-            printf("PID %d :: error is %d", pid, result);
-            perror("ERROR! Write failed");
+            printf("PID %d :: error is %d\n", pid, result);
+            perror("ERROR! Write failed\n");
             close(fd);
             return 0;
         }
@@ -121,7 +122,7 @@ int main(int argc, char *argv[]) {
         printf("PID %d Extracting..\n", pid);
         result = read(fd, (void *)(&tmp), sizeof(int32_t));
         if (result < 0) {
-            printf("PID %d :: ", pid);
+            printf("PID %d :: \n", pid);
             perror(RED "ERROR! Read failed\n" RESET);
             close(fd);
             return 0;
