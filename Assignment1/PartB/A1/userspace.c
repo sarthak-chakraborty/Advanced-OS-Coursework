@@ -96,15 +96,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 5; i++)
     {
         printf("PID %d Inserting %d\n", pid, val[i]);
-        /*
-        char buf[10] = "AAAAA";
-        buf[0] = 1; buf[1] = 2;
-        char x = '2';
-        // result = write(fd, &f, sizeof(f));
-        printf("float %ld \n", sizeof(f));
-        result = write(fd, buf, i < 1 ? 1 : i);
-        // result = write(fd, &x, 1);
-        */
         result = write(fd, &val[i], sizeof(int32_t));
         if (result < 0) {
             printf("PID %d :: error is %d\n", pid, result);
