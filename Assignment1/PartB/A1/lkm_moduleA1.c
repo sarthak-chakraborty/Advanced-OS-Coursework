@@ -295,7 +295,7 @@ static ssize_t dev_write(struct file *file, const char* buf, size_t count, loff_
 
 	// If heap is initialized
 	if (args_set) {
-		if (count > 4 || count == 0) {
+		if (count != 4) {
 			printk(KERN_ALERT DEVICE_NAME ": PID %d WRONG DATA SENT. %d bytes", current->pid, buffer_len);
 			return -EINVAL;
 		}

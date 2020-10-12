@@ -472,7 +472,7 @@ static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		}
 
 		// Get the integer number and insert into heap
-		retval = copy_from_user(&num, (int *)arg, sizeof(int));
+		retval = copy_from_user(&num, (int32_t *)arg, sizeof(int32_t));
 		if(retval)
 			return -EINVAL;
 
