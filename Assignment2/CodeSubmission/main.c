@@ -10,8 +10,8 @@ int main(){
 	ret = create_disk(&diskptr, 40984);
 	printf("return value: %d\n\n", ret);
 
-	char w_data[4096] = "Sarthak";
-	w_data[7] = '\0';
+	char w_data[4096] = "This is a test";
+	w_data[14] = '\0';
 
 
 
@@ -19,7 +19,7 @@ int main(){
 	printf("return value: %d\n\n", ret);
 
 	void *r_data = (void *)malloc(BLOCKSIZE);
-	ret = read_block(&diskptr, 0, &r_data);
+	ret = read_block(&diskptr, 0, r_data);
 	printf("Here: %s\n", (char *)r_data);
 	printf("return value: %d\n\n", ret);
 

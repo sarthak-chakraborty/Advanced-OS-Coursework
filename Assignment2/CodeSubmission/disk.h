@@ -13,7 +13,7 @@ typedef struct disk {
 
 int create_disk(disk *diskptr, int nbytes);
 
-int read_block(disk *diskptr, int blocknr, void **block_data);
+int read_block(disk *diskptr, int blocknr, void *block_data);
 
 int write_block(disk *diskptr, int blocknr, void *block_data);
 

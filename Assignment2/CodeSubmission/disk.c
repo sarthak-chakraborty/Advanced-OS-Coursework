@@ -31,13 +31,13 @@ int create_disk(disk *diskptr, int nbytes){
 }
 
 
-int read_block(disk *diskptr, int blocknr, void **block_data){
+int read_block(disk *diskptr, int blocknr, void *block_data){
 	int n_blocks = diskptr->blocks;
 
 	if(blocknr < 0 || blocknr > n_blocks-1)
 		return -1;
 
-	*block_data = (void *)diskptr->block_arr[blocknr];
+	memcpy(block_data, diskptr->block_arr[blocknr], BLOCKSIZE);
 	diskptr->reads += 1;
 	
 	return 0;
@@ -50,7 +50,7 @@ int write_block(disk *diskptr, int blocknr, void *block_data){
 	if(blocknr < 0 || blocknr > n_blocks-1)
 		return -1;
 
-	diskptr->block_arr[blocknr] = (char *)block_data;
+	memcpy(diskptr->block_arr[blocknr], (char *)block_data, BLOCKSIZE);
 	diskptr->writes += 1;
 	
 	return 0;
@@ -60,13 +60,9 @@ int write_block(disk *diskptr, int blocknr, void *block_data){
 int free_disk(disk *diskptr){
 	int n_blocks = diskptr->blocks;
 
-	// printf("nblocks_free: %d\n", n_blocks);
-
-	// for(int i = 0; i < n_blocks; i++){
-	// 	printf("%d \n",i);
-	// 	free(diskptr->block_arr[i]);
-	// }
-	// printf("Here");
+	for(int i = 0; i < n_blocks; i++){
+		free(diskptr->block_arr[i]);
+	}
 	free(diskptr->block_arr);
 
 	printf("DISK FREED\n");
