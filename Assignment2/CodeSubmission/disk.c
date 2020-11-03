@@ -16,16 +16,20 @@ int create_disk(disk *diskptr, int nbytes){
 	diskptr->reads = 0;
 	diskptr->writes = 0;
 	diskptr->block_arr = (char **)malloc(n_blocks * sizeof(char *));
-	if(diskptr->block_arr == NULL)
+	if(diskptr->block_arr == NULL){
+		printf("[ERROR] __No memory available to create disk__\n\n");
 		return -1;
+	}
 
 	for(int i = 0; i < n_blocks; i++){
 		diskptr->block_arr[i] = (char *)malloc(BLOCKSIZE);
-		if(diskptr->block_arr[i] == NULL)
+		if(diskptr->block_arr[i] == NULL){
+			printf("[ERROR] __No memory available to create disk__\n\n");
 			return -1;
+		}
 	}
 
-	printf("DISK CREATED\n");
+	printf("[SUCCESS] Disk Created!\n");
 
 	return 0;
 }
@@ -34,12 +38,20 @@ int create_disk(disk *diskptr, int nbytes){
 int read_block(disk *diskptr, int blocknr, void *block_data){
 	int n_blocks = diskptr->blocks;
 
-	if(blocknr < 0 || blocknr > n_blocks-1)
+	if(blocknr < 0 || blocknr > n_blocks-1){
+		printf("[ERROR] __Invalid Block access__\n\n");
 		return -1;
+	}
 
 	memcpy(block_data, diskptr->block_arr[blocknr], BLOCKSIZE);
+
+	if(block_data == NULL){
+		printf("[ERROR] __Copy to data buffer from disk memory failed__\n\n");
+		return -1;
+	}
+
 	diskptr->reads += 1;
-	
+
 	return 0;
 }
 
@@ -47,10 +59,18 @@ int read_block(disk *diskptr, int blocknr, void *block_data){
 int write_block(disk *diskptr, int blocknr, void *block_data){
 	int n_blocks = diskptr->blocks;
 
-	if(blocknr < 0 || blocknr > n_blocks-1)
+	if(blocknr < 0 || blocknr > n_blocks-1){
+		printf("[ERROR] __Invalid Block access__\n\n");
 		return -1;
+	}
 
 	memcpy(diskptr->block_arr[blocknr], (char *)block_data, BLOCKSIZE);
+
+	if(diskptr->block_arr[blocknr] == NULL){
+		printf("[ERROR] __Copy to disk memory from data buffer failed__\n\n");
+		return -1;
+	}
+
 	diskptr->writes += 1;
 	
 	return 0;
@@ -65,7 +85,7 @@ int free_disk(disk *diskptr){
 	}
 	free(diskptr->block_arr);
 
-	printf("DISK FREED\n");
+	printf("[SUCCESS] Disk Freed!\n");
 
 	return 0;
 }
