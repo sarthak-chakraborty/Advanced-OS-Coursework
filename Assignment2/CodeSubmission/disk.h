@@ -1,6 +1,6 @@
 #include<stdint.h>
-
-const static int BLOCKSIZE = 4*1024;
+const static int STAT_BLOCK_SIZE = 24;
+const static int BLOCKSIZE = 4 * 1024;
 
 typedef struct disk {
 	uint32_t size; // size of the disk
