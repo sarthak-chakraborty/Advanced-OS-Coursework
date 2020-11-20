@@ -1,13 +1,6 @@
 #include<stdint.h>
-#include "disk.h"
-#define MOUNTED 1
-#define UNMOUNTED 0
 
-typedef unsigned char* bitmap_t;
 const static uint32_t MAGIC = 12345;
-disk *distptr;
-super_block sb;
-bitmap_t inode_bitmap, data_bitmap;
 /*
 inode -> 8*4  bytes = 32 bytes
 data block = 32 bytes

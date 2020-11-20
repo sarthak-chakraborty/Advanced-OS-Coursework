@@ -2,8 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-
+const static int STAT_BLOCK_SIZE = 24;
 
 int create_disk(disk *diskptr, int nbytes) {
 	printf("nbytes: %d\n", nbytes);

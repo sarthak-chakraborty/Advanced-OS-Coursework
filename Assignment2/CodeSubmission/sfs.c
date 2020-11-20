@@ -1,12 +1,19 @@
+#include "disk.h"
 #include "sfs.h"
 
+#define MOUNTED 1
+#define UNMOUNTED 0
 
+typedef unsigned char* bitmap_t;
 
 int STATE = MOUNTED;
-typedef struct mem_bitmap {
+disk *mem_diskptr = NULL;
+
+typedef struct bitmap_m{
 	bitmap_t bitmap_inode;
 	bitmap_t bitmap_data;
-} mem_bitmap;
+} bitmap_m;
+bitmap_m mem_bitmap;
 
 
 void set_bitmap(bitmap_t b, int i) {
@@ -22,12 +29,10 @@ int get_bitmap(bitmap_t b, int i) {
 }
 
 
-int format(disk *_diskptr) {
+int format(disk *diskptr) {
 	super_block sb;
 	int M, N, I, IB, R, DBB, DB;
 	int ret;
-	/*assign this to the diskptr of the file system*/
-	diskptr = _diskptr;
 
 	N = diskptr->blocks;
 	M = N - 1;
@@ -147,6 +152,7 @@ int format(disk *_diskptr) {
 		}
 	}
 
+	STATE = UNMOUNTED;
 	return 0;
 }
 
@@ -171,16 +177,64 @@ int mount(disk *diskptr) {
 	/*
 	TODO: load bitmaps and mounted file descriptor in the memory
 	*/
+	mem_diskptr = diskptr;
+	STATE = MOUNTED;
 
 	return 0;
 }
+
+
+int create_file(){
+	if(mem_diskptr == NULL || STATE == UNMOUNTED){
+		printf("[ERROR] __Create File failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
+	
+	int ret;
+	super_block sb;
+
+	ret = read_block(mem_diskptr, 0, &sb);
+	if(ret == -1){
+		printf("[ERROR] __Create File failed__\n [ERROR] __Disk read failed__\n\n");
+		return -1;
+	}
+	
+	int inode_bitmap_block_start = sb.inode_bitmap_block_idx;
+	int inode_bitmap_block_end = sb.data_block_bitmap_idx - 1;
+
+	mem_bitmap.bitmap_inode = (bitmap_t)malloc((sb.inodes + 7) / 8);
+
+	if(inode_bitmap_block_start == inode_bitmap_block_end){
+		ret = read_block(mem_diskptr, inode_bitmap_block_start, mem_bitmap.bitmap_inode);
+		if(ret == -1){
+			printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
+			return -1;
+		}
+	}
+	else{
+		for(int i = inode_bitmap_block_start; i < inode_bitmap_block_end; i++){
+			int block_addr = i - inode_bitmap_block_start;
+			ret = read_block(mem_diskptr, i, (mem_bitmap.bitmap_inode + block_addr*BLOCKSIZE));
+			if(ret == -1){
+				printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
+				return -1;
+			}
+		}
+	}
+
+	/* Find the leftmost unset bit */
+	
+
+}
+
+
 inode* retrieve_inode(super_block* sb, int inumber) {
 	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
 
 	inode *node = NULL;
-	bitmap_t bitmap = diskptr->block_arr[sb->inode_bitmap_block_idx];
+	bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
 	if (get_bitmap(bitmap, inumber))
-		node = (inode*)(diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
+		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
 	return node;
 }
 char* retrieve_data_block(super_block* sb, int block_idx) {

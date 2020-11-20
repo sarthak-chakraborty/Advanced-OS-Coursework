@@ -1,5 +1,5 @@
 #include<stdint.h>
-const static int STAT_BLOCK_SIZE = 24;
+
 const static int BLOCKSIZE = 4 * 1024;
 
 typedef struct disk {
