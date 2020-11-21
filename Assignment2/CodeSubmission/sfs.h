@@ -1,11 +1,7 @@
 #include<stdint.h>
 
 const static uint32_t MAGIC = 12345;
-/*
-inode -> 8*4  bytes = 32 bytes
-data block = 32 bytes
-indirect -> direct[5]  (an array of 5 data block indices)
-*/
+
 typedef struct inode {
 	uint32_t valid; // 0 if invalid
 	uint32_t size; // logical size of the file

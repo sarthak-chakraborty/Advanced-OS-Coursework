@@ -1,5 +1,6 @@
 #include "disk.h"
 #include "sfs.h"
+#include <stdio.h>
 
 #define MOUNTED 1
 #define UNMOUNTED 0
@@ -26,6 +27,17 @@ void unset_bitmap(bitmap_t b, int i) {
 
 int get_bitmap(bitmap_t b, int i) {
 	return b[i / 8] & (1 << (i & 7)) ? 1 : 0;
+}
+
+
+inode* retrieve_inode(super_block* sb, int inumber) {
+	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
+
+	inode *node = NULL;
+	// bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
+	if (get_bitmap(mem_bitmap.bitmap_inode, inumber))
+		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
+	return node;
 }
 
 
@@ -102,7 +114,7 @@ int format(disk *diskptr) {
 		unset_bitmap(bitmap_d, i);
 
 	if (DBB == 1) {
-		ret = write_block(diskptr, sb.data_block_bitmap_idx, bitmap);
+		ret = write_block(diskptr, sb.data_block_bitmap_idx, bitmap_d);
 		if (ret == -1) {
 			printf("[ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
@@ -143,9 +155,9 @@ int format(disk *diskptr) {
 				.direct = { -1, -1, -1, -1, -1},
 				.indirect = -1
 			};
-			nodes_in_block[inode_idx] = inode;
+			nodes_in_block[inode_idx] = node;
 		}
-		ret = write_block(diskptr, sb.inode_block_idx + i, nodes_in_block);
+		ret = write_block(diskptr, sb.inode_block_idx + block_idx, nodes_in_block);
 		if (ret == -1) {
 			printf("[ERROR] __Inode initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
@@ -159,11 +171,9 @@ int format(disk *diskptr) {
 
 int mount(disk *diskptr) {
 	int ret;
+	super_block sb;
 
-	super_block *sb;
-	sb = (super_block *)malloc(sizeof(super_block));
-
-	ret = read_block(diskptr, 0, sb);
+	ret = read_block(diskptr, 0, &sb);
 	if (ret == -1) {
 		printf("[ERROR] __Super block read failed__\n [ERROR] __Mounting the file system failed__\n\n");
 		return -1;
@@ -177,28 +187,6 @@ int mount(disk *diskptr) {
 	/*
 	TODO: load bitmaps and mounted file descriptor in the memory
 	*/
-	mem_diskptr = diskptr;
-	STATE = MOUNTED;
-
-	return 0;
-}
-
-
-int create_file(){
-	if(mem_diskptr == NULL || STATE == UNMOUNTED){
-		printf("[ERROR] __Create File failed__\n [ERROR] __Disk unmounted__\n\n");
-		return -1;
-	}
-	
-	int ret;
-	super_block sb;
-
-	ret = read_block(mem_diskptr, 0, &sb);
-	if(ret == -1){
-		printf("[ERROR] __Create File failed__\n [ERROR] __Disk read failed__\n\n");
-		return -1;
-	}
-	
 	int inode_bitmap_block_start = sb.inode_bitmap_block_idx;
 	int inode_bitmap_block_end = sb.data_block_bitmap_idx - 1;
 
@@ -222,26 +210,177 @@ int create_file(){
 		}
 	}
 
-	/* Find the leftmost unset bit */
+	mem_diskptr = diskptr;
+	STATE = MOUNTED;
+
+	return 0;
+}
+
+
+int create_file(){
+	if(mem_diskptr == NULL || STATE == UNMOUNTED){
+		printf("[ERROR] __Create File failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
 	
+	int ret;
+	super_block sb;
+	ret = read_block(mem_diskptr, 0, &sb);
+	if(ret == -1){
+		printf("[ERROR] __Create File failed__\n [ERROR] __Disk read failed__\n\n");
+		return -1;
+	}
 
+	/* Find the leftmost unset bit */
+	int free_inode_pos = -1;
+	for(int i = 0; i < sb.inodes; i++){
+		if(get_bitmap(mem_bitmap.bitmap_inode, i)){
+			free_inode_pos = i;
+			break;
+		}
+	}
+
+	/* Update Inode Informtion */
+	inode *node = retrieve_inode(&sb, free_inode_pos);
+	if (node == NULL){
+		printf("[ERROR] __Create File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	node->size = 0;
+	node->valid = 1;
+	set_bitmap(mem_bitmap.bitmap_inode, free_inode_pos);
+
+	int iblock = ceil(free_inode_pos / 8), inum_in_block = free_inode_pos & 7;
+	memcpy(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE, node, sizeof(*node));
+
+
+	/* Update Inode Bitmap */
+	int inode_bitmap_block_start = sb.inode_bitmap_block_idx;
+	int inode_bitmap_block_end = sb.data_block_bitmap_idx - 1;
+
+	if(inode_bitmap_block_start == inode_bitmap_block_end){
+		ret = write_block(mem_diskptr, sb.inode_bitmap_block_idx, mem_bitmap.bitmap_inode);
+		if (ret == -1) {
+			printf("[ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+			return -1;
+		}
+	}
+	else{
+		for(int i = inode_bitmap_block_start; i < inode_bitmap_block_end; i++){
+			int block_addr = i - inode_bitmap_block_start;
+			bitmap_t bitmap_proxy = (bitmap_t)malloc(BLOCKSIZE);
+			memcpy(bitmap_proxy, (mem_bitmap.bitmap_inode + block_addr*BLOCKSIZE), BLOCKSIZE);
+
+			ret = write_block(mem_diskptr, i, bitmap_proxy);
+			if (ret == -1) {
+				printf("[ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+				return -1;
+			}
+			free(bitmap_proxy);
+		}
+	}
+	
+	return free_inode_pos;
 }
 
 
-inode* retrieve_inode(super_block* sb, int inumber) {
+int remove_file(int inumber){
+	if(mem_diskptr == NULL || STATE == UNMOUNTED){
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
+
+	if(!get_bitmap(mem_bitmap.bitmap_inode, inumber)){
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Inode number is not set__\n\n");
+		return -1;
+	}
+
+	int ret;
+	super_block sb;
+	ret = read_block(mem_diskptr, 0, &sb);
+	if(ret == -1){
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Disk read failed__\n\n");
+		return -1;
+	}
+
+	/* Update Inode Informtion */
+	inode *node = retrieve_inode(&sb, inumber);
+	if (node == NULL){
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	node->valid = 1;
+	unset_bitmap(mem_bitmap.bitmap_inode, inumber);
+
 	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
+	memcpy(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE, node, sizeof(*node));
 
-	inode *node = NULL;
-	bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
-	if (get_bitmap(bitmap, inumber))
-		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
-	return node;
+	/* Update Inode Bitmap */
+	int inode_bitmap_block_start = sb.inode_bitmap_block_idx;
+	int inode_bitmap_block_end = sb.data_block_bitmap_idx - 1;
+
+	if(inode_bitmap_block_start == inode_bitmap_block_end){
+		ret = write_block(mem_diskptr, sb.inode_bitmap_block_idx, mem_bitmap.bitmap_inode);
+		if (ret == -1) {
+			printf("[ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+			return -1;
+		}
+	}
+	else{
+		for(int i = inode_bitmap_block_start; i < inode_bitmap_block_end; i++){
+			int block_addr = i - inode_bitmap_block_start;
+			bitmap_t bitmap_proxy = (bitmap_t)malloc(BLOCKSIZE);
+			memcpy(bitmap_proxy, (mem_bitmap.bitmap_inode + block_addr*BLOCKSIZE), BLOCKSIZE);
+
+			ret = write_block(mem_diskptr, i, bitmap_proxy);
+			if (ret == -1) {
+				printf("[ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+				return -1;
+			}
+			free(bitmap_proxy);
+		}
+	}
+
+	return 0;
 }
+
+
+int stat(int inumer){
+	int ret;
+	super_block sb;
+	ret = read_block(mem_diskptr, 0, &sb);
+	if(ret == -1){
+		printf("[ERROR] __Print Stat failed__\n [ERROR] __Disk read failed__\n\n");
+		return -1;
+	}
+
+	inode *node = retrieve_inode(&sb, inumer);
+	if (node == NULL){
+		printf("[ERROR] __Print Stat failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	uint32_t size = node->size;
+	uint32_t num_direct_pointers = (size > 5*BLOCKSIZE) ? 5 : ceil(size / BLOCKSIZE);
+	uint32_t num_indirect_pointers = (size > 5*BLOCKSIZE) ? ceil((size - 5*BLOCKSIZE)/BLOCKSIZE) : 0;
+	uint32_t num_data_blocks = (num_indirect_pointers == 0) ? num_direct_pointers : num_direct_pointers + num_indirect_pointers + 1;
+
+	printf("[SUCCESS] __Inode Information fetched successfully__\n");
+	printf("Logical Size: %ld\n", size);
+	printf("Number of Data Blocks in Use: %ld\n", num_data_blocks);
+	printf("Number of direct pointers: %ld", num_direct_pointers);
+	printf("Number of indirect pointers: %ld", num_indirect_pointers);
+
+	return 0;
+}
+
+
 char* retrieve_data_block(super_block* sb, int block_idx) {
 
 }
+
+
 int read_i(int inumber, char *data, int length, int offset) {
-	super_block *sb = diskptr;
+	super_block *sb = mem_diskptr;
 	//validating inode number
 	if (inumber < 0 || inumber >= sb->inodes) {
 		return -1;
@@ -252,5 +391,6 @@ int read_i(int inumber, char *data, int length, int offset) {
 
 
 }
+
 
 int write_i(int inumber, char *data, int length, int offset);
