@@ -395,6 +395,33 @@ int remove_file(int inumber) {
 		}
 	}
 
+
+	/* Update Data Bitmap */
+	int data_bitmap_block_start = sb.data_block_bitmap_idx;
+	int data_bitmap_block_end = sb.inode_block_idx - 1;
+
+	if (data_bitmap_block_start == data_bitmap_block_end) {
+		ret = write_block(mem_diskptr, sb.data_block_bitmap_idx, mem_bitmap.bitmap_data);
+		if (ret == -1) {
+			printf("[ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
+			return -1;
+		}
+	}
+	else {
+		for (int i = data_bitmap_block_start; i < data_bitmap_block_end; i++) {
+			int block_addr = i - data_bitmap_block_start;
+			bitmap_t bitmap_proxy = (bitmap_t)malloc(BLOCKSIZE);
+			memcpy(bitmap_proxy, (mem_bitmap.bitmap_data + block_addr * BLOCKSIZE), BLOCKSIZE);
+
+			ret = write_block(mem_diskptr, i, bitmap_proxy);
+			if (ret == -1) {
+				printf("[ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
+				return -1;
+			}
+			free(bitmap_proxy);
+		}
+	}
+
 	return 0;
 }
 
