@@ -30,6 +30,14 @@ typedef struct super_block {
 } super_block;
 
 
+typedef struct dir_block {
+	uint32_t valid;
+	uint32_t type;
+	char* file_name;
+	uint32_t length;
+	uint32_t inumber;
+} dir_block;
+
 int format(disk *diskptr);
 
 int mount(disk *diskptr);
