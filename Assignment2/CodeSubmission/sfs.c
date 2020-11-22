@@ -525,7 +525,10 @@ int read_i(int inumber, char *data, int length, int offset) {
 		printf("[sfs] [ERROR] __Read_i failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
-
+	if (offset > node->size) {
+		printf("[sfs] [ERROR] __Read_i failed__\n [ERROR] __Offset greater than size__\n\n");
+		return -1;
+	}
 	if (node->valid == 0) {
 		printf("[sfs] [ERROR] @read_i file doesn't contain requested amount of data\n");
 		return -1;
@@ -568,7 +571,8 @@ int read_i(int inumber, char *data, int length, int offset) {
 				printf("[sfs] @read_i reading from direct block (node->direct[%d] = %d) ERROR\n", start_idx, node->direct[start_idx]);
 				return -1; //error in read
 			}
-			memcpy(data, temp_block, bytes_toread);
+			memcpy(data, temp_block + block_offset, bytes_toread);
+			printf("block_offset:%d, bytes_toread:%d\n", block_offset, bytes_toread);
 			total_data_read += bytes_toread;
 			data += bytes_toread;
 			length -= bytes_toread;
@@ -597,7 +601,7 @@ int read_i(int inumber, char *data, int length, int offset) {
 				printf("[sfs] @read_i reading from indirect block (*ptr = %d) ERROR\n", *ptr);
 				return -1; //error in read
 			}
-			memcpy(data, temp_block, bytes_toread);
+			memcpy(data, temp_block + block_offset, bytes_toread);
 			total_data_read += bytes_toread;
 			data += bytes_toread;
 			length -= bytes_toread;
@@ -652,6 +656,10 @@ int write_i(int inumber, char *data, int length, int offset) {
 	inode *node = retrieve_inode(&sb, inumber);
 	if (node == NULL) {
 		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	if (offset > node->size) {
+		printf("[sfs] [ERROR] __Read_i failed__\n [ERROR] __Offset greater than size__\n\n");
 		return -1;
 	}
 	if (node->valid == 0) {
@@ -775,16 +783,55 @@ int write_i(int inumber, char *data, int length, int offset) {
 }
 
 
+
+int read_data_block(int entries_read, int num_files, inode *node, dir_block *dir_entries) {
+	/* Read the list of files and subdirectories */
+	for (int i = 0; i < 5; i++) {
+		if (entries_read < num_files) {
+			if (read_block(mem_diskptr, node->direct[i], temp_block) < 0) {
+				printf("[ERROR] __Create Directory failed__\n [ERROR] __readblock failed__\n\n");
+				return -1;
+			}
+			memcpy(dir_entries + entries_read, temp_block, min(BLOCKSIZE / sizeof(dir_block), num_files - entries_read));
+			entries_read += min(BLOCKSIZE / sizeof(dir_block), num_files - entries_read);
+		}
+		else {
+			break;
+		}
+	}
+	if (entries_read < num_files) {
+		int indirect_ptrs[1024];
+		if (read_block(mem_diskptr, node->indirect, indirect_ptrs) < 0) {
+			printf("[ERROR] __Create Directory failed__\n [ERROR] __readblock failed__\n\n");
+			return -1;
+		}
+		for (int i = 0; i < BLOCKSIZE / sizeof(int); i++) {
+			if (entries_read < num_files) {
+				if (read_block(mem_diskptr, indirect_ptrs[i], temp_block) < 0) {
+					printf("[ERROR] __Create Directory failed__\n [ERROR] __readblock failed__\n\n");
+					return -1;
+				}
+				memcpy(dir_entries + entries_read, temp_block, min(BLOCKSIZE / sizeof(dir_block), num_files - entries_read));
+				entries_read += min(BLOCKSIZE / sizeof(dir_block), num_files - entries_read);
+			}
+			else
+				break;
+		}
+	}
+	return 0;
+}
+
+
 int create_dir(char *dirpath) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
-		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
 	}
 
 	int ret;
 	super_block sb;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Super Block read failed__\n\n");
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Super Block read failed__\n\n");
 		return -1;
 	}
 	memcpy(&sb, temp_block, sizeof(super_block));
@@ -794,19 +841,107 @@ int create_dir(char *dirpath) {
 	*/
 	inode *node = retrieve_inode(&sb, 0);
 	if (node == NULL) {
-		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 
+	/* Root directory not initialised */
+	if (node->valid == 0) {
+		if (strcmp(dirpath, "/") == 0) {
+			node->valid = 1;
+		}
+		else {
+			printf("[ERROR] __Create Directory failed__\n [ERROR] __Root not present__\n\n");
+			return -1;
+		}
+	}
+
+	/* Get the number of files */
+	int num_files = node->size / sizeof(dir_block);
+	dir_block *dir_entries = (dir_block *)malloc((num_files + 1) * sizeof(dir_block));
+	int entries_read = 0;
+
+	if (read_data_block(entries_read, num_files, node, dir_entries) < 0)
+		return -1;
 
 	char *token;
 	token = strtok(dirpath, "/");
 	if (token == NULL) {
-		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
 		return -1;
 	}
-	while (token != NULL) {
 
+	char* dirname;
+	dirname = token;
+	int parent_inode, inumber = 0;
+	while (token != NULL) {
+		int file_found = 0;
+
+		/* Search for folder or files */
+		for (int i = 0; i < num_files; i++) {
+
+			if (dir_entries[i].valid && (dir_entries[i].file_name, token) == 0) {
+				parent_inode = inumber;
+				inumber = dir_entries[i].inumber;
+
+				if (dir_entries[i].type == 0) {
+					printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
+					return -1;
+				}
+
+				inode *node = retrieve_inode(&sb, 0);
+				if (node == NULL) {
+					printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
+					return -1;
+				}
+
+				num_files = node->size / sizeof(dir_block);
+				dir_block *dir_entries = (dir_block *)malloc(sizeof(dir_block) * (num_files + 1));
+				int entries_read = 0;
+
+				if (read_data_block(entries_read, num_files, node, dir_entries) < 0)
+					return -1;
+
+				file_found = 1;
+				break;
+			}
+		}
+
+		if (!file_found) {
+			dirname = token;
+			token = strtok(NULL, "/");
+
+			// If not return error
+			if (token != NULL) {
+				return -1;
+			}
+
+			// Create new file for the directory. Search for a empty location in the parent's list
+			int new_dir_inode = create_file();
+			int dir_entry_i;
+			for (dir_entry_i = 0; dir_entry_i < num_files; dir_entry_i++) {
+				if (!dir_entries[dir_entry_i].valid) {
+					break;
+				}
+			}
+			if (dir_entry_i == num_files)
+				num_files++;
+
+			// Initialise the directory entry as valid, with given folder name
+			dir_entries[dir_entry_i].valid = 1;
+			dir_entries[dir_entry_i].inumber = new_dir_inode;
+			dir_entries[dir_entry_i].type = 1;
+			strcpy(dir_entries[dir_entry_i].file_name, dirname);
+			dir_entries[dir_entry_i].length = min(100, strlen(dirname));
+
+			int entries_written = 0;
+			int direct_i = 0;
+
+			if (read_data_block(entries_read, num_files, node, dir_entries) < 0)
+				return -1;
+
+		}
+		dirname = token;
 		token = strtok(NULL, "/");
 	}
 

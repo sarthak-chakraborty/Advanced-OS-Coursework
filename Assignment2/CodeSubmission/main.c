@@ -43,9 +43,9 @@ int main() {
 	printf(">>>write_i return value: %d\n\n", ret);
 
 	char buf[10] = "xxxxxxx";
-	printf("Calling read_i\n");
 	int toread = 1;
-	offset = 100;
+	printf("Calling read_i\n");
+	offset = 2;
 	ret = read_i(file1, buf, toread, offset);
 	printf("READ this into buf :\n");
 	for (int i = 0; i < toread; i++) {
@@ -53,6 +53,19 @@ int main() {
 	}
 	printf(">>>read_i return value: %d\n\n", ret);
 
+	printf("Calling write_i\n");
+	ret = write_i(file1, data, 4, offset = 3);
+	printf(">>>write_i return value: %d\n\n", ret);
+
+	printf("Calling read_i\n");
+	toread = 7;
+	offset = 0;
+	ret = read_i(file1, buf, toread, offset);
+	printf("READ this into buf :\n");
+	for (int i = 0; i < toread; i++) {
+		printf("%c\n", buf[i]);
+	}
+	printf(">>>read_i return value: %d\n\n", ret);
 	printf("Calling remove_file\n");
 	ret = remove_file(file1);
 	printf(">>>remove_file return value: %d\n\n", ret);
