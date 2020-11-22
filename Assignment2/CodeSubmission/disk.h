@@ -1,5 +1,7 @@
 #include<stdint.h>
-
+#include <string.h>
+#ifndef DISK_H
+#define DISK_H
 const static int BLOCKSIZE = 4 * 1024;
 
 typedef struct disk {
@@ -18,3 +20,4 @@ int read_block(disk *diskptr, int blocknr, void *block_data);
 int write_block(disk *diskptr, int blocknr, void *block_data);
 
 int free_disk(disk *diskptr);
+#endif

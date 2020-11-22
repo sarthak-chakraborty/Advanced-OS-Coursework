@@ -1,11 +1,12 @@
 #include<stdint.h>
-
+#include<math.h>
+#include <stdio.h>
+#include<stdlib.h>
+#include "disk.h"
+#ifndef SFS_H
+#define SFS_H
 const static uint32_t MAGIC = 12345;
-/*
-inode -> 8*4  bytes = 32 bytes
-data block = 32 bytes
-indirect -> direct[5]  (an array of 5 data block indices)
-*/
+
 typedef struct inode {
 	uint32_t valid; // 0 if invalid
 	uint32_t size; // logical size of the file
@@ -48,3 +49,4 @@ int read_file(char *filepath, char *data, int length, int offset);
 int write_file(char *filepath, char *data, int length, int offset);
 int create_dir(char *dirpath);
 int remove_dir(char *dirpath);
+#endif
