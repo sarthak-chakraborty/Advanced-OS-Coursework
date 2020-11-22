@@ -1,9 +1,10 @@
-#include<stdint.h>
-#include <string.h>
 #ifndef DISK_H
 #define DISK_H
+#include<stdint.h>
+#include <string.h>
 const static int BLOCKSIZE = 4 * 1024;
-
+#define DECL_BLOCK(b) void* (b) = malloc(BLOCKSIZE);
+#define FREE_BLOCK(b) free((b))
 typedef struct disk {
 	uint32_t size; // size of the disk
 	uint32_t blocks; // number of usable blocks (except stat block)

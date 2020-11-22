@@ -17,6 +17,10 @@ typedef struct bitmap_m {
 } bitmap_m;
 bitmap_m mem_bitmap;
 
+uint32_t max(uint32_t x, uint32_t y) {
+	if (x > y)return x;
+	return y;
+}
 
 void set_bitmap(bitmap_t b, int i) {
 	b[i / 8] |= 1 << (i & 7);
@@ -249,12 +253,6 @@ int create_file() {
 		return -1;
 	}
 
-	node = NULL;
-	int iblock = ceil(free_inode_pos / 8), inum_in_block = free_inode_pos & 7;
-	// bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
-	if (get_bitmap(mem_bitmap.bitmap_inode, free_inode_pos))
-		node = (inode*)(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE);
-	// return node;
 	node->size = 0;
 	node->valid = 1;
 	set_bitmap(mem_bitmap.bitmap_inode, free_inode_pos);
@@ -397,36 +395,194 @@ int read_i(int inumber, char *data, int length, int offset) {
 	super_block sb;
 	memcpy(&sb, temp_block, sizeof(super_block));
 	//validating inode number
-	if (inumber < 0 || inumber >= sb.inodes) {
+	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0) {
 		return -1;
 	}
-	//validating length
-	if (length < 0);
+	//validating inode
+	inode *node = retrieve_inode(&sb, inumber);
+	if (node == NULL) {
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	if (node->valid == 0) {
+		free(node);
+		printf("[ERROR] @read_i file doesn't contain requested amount of data\n");
+		return -1;
+	}
+	if (node->size - offset < length) { // requested length is greater than data present after offset
+		length = node->size - offset;
+	}
 	//validating offset
 	/*
-	load super_block into &sb
-	load inode_bitmap into bitmap
-	check if the inode is present by bitmap[inumber] == 1
-	blocknum = (sb.first_inode_block + inumber)/8, offset_inside_blocknum = (same cheez)%8
-	retirieve that block with blocknum
-	retrieve that inode from this block
-	for offset = givenoffset; keep running:
-	    if offset is < 5*BLOCK_SIZE
-	        retrieve that direct block
-	    else
-	         retrieve that indirect indirect pointer and usme retrieve data block
-	    from the retrieved data block given offset read
-	    toread = BLOCK_SIZE;
-	    if( length <= BLOCK_SIZE ){
-	        toread = length;
-	    }
-	    update the offset by offset += toread
-	    length -= toread
+		load super_block into &sb
+		load inode_bitmap into bitmap
+		check if the inode is present by bitmap[inumber] == 1
+		blocknum = (sb.first_inode_block + inumber)/8, offset_inside_blocknum = (same cheez)%8
+		retirieve that block with blocknum
+		retrieve that inode from this block
+		for offset = givenoffset; keep running:
+		    if offset is < 5*BLOCK_SIZE
+		        retrieve that direct block
+		    else
+		         retrieve that indirect indirect pointer and usme retrieve data block
+		    from the retrieved data block given offset read
+		    toread = BLOCK_SIZE;
+		    if( length <= BLOCK_SIZE ){
+		        toread = length;
+		    }
+		    update the offset by offset += toread
+		    length -= toread
 	*/
-
-
 	// mem_bitmap = {sb.};
+	if (offset < 5 * BLOCKSIZE) {
+		int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, read_bytes;
+		for (; start_idx < 5; start_idx++) {
+			read_bytes = BLOCKSIZE;
+			if (length < BLOCKSIZE) {
+				read_bytes = length;
+			}
+			read_block(mem_diskptr, node->direct[start_idx], temp_block);
+			memcpy(data, temp_block, read_bytes);
+			data += read_bytes;
+			length -= read_bytes;
+		}
+	}
+	DECL_BLOCK(indirect);
+	if (length > 0) {
+		read_block(mem_diskptr, node->indirect, indirect);
+		int* ptr = indirect, read_bytes;
+		for (; ptr < indirect + BLOCKSIZE; ptr++) {
+			read_bytes = BLOCKSIZE;
+			if (length < BLOCKSIZE) {
+				read_bytes = length;
+			}
+			if (mem_bitmap.bitmap_data[*ptr] == 0) {
+				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
+					have had their bit set according to the size of file inode\n");
+				break;
+			}
+			read_block(mem_diskptr, *ptr, temp_block);
+			memcpy(data, temp_block, read_bytes);
+			data += read_bytes;
+			length -= read_bytes;
+		}
+	}
+	FREE_BLOCK(indirect);
+	free(node);
+	return 0;
 }
 
 
-int write_i(int inumber, char *data, int length, int offset);
+int write_i(int inumber, char *data, int length, int offset) {
+	if (read_block(mem_diskptr, 0, temp_block) < 0) {
+		printf("@read_i reading super_block ERROR\n");
+		return -1; //error in read
+	}
+	super_block sb;
+	memcpy(&sb, temp_block, sizeof(super_block));
+	//validating inode number
+	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0) {
+		return -1;
+	}
+	//validating inode
+	inode *node = retrieve_inode(&sb, inumber);
+	if (node == NULL) {
+		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+	if (node->valid == 0) {
+		free(node);
+		printf("[ERROR] @write_i file doesn't contain requested amount of data\n");
+		return -1;
+	}
+	if (node->size - offset < length) { // requested length is greater than data present after offset
+		// length = node->size - offset;
+		/*Need to extend file size*/
+		int req_num_blocks = ceil((length - (node->size - offset)) / BLOCKSIZE);
+		int* block_ids = get_empty_blocks(req_num_blocks);
+		if (block_ids == NULL) {
+			printf("@write_i No more space left in the disk\n");
+			return -1;
+		}
+		int i = 0;
+		for (i = 0; i < req_num_blocks; i++) {
+
+
+		}
+		if (floor((node->size) / BLOCKSIZE) + 1 < 5) {
+			int idx = floor((node->size) / BLOCKSIZE) + 1;
+			for (; idx < 5 && i < req_num_blocks; i++) {
+				node->direct[idx] = block_ids[i];
+			}
+		}
+		if (i < req_num_blocks) {
+			if (node->indirect == -1) {
+				node->indirect = *get_empty_blocks(1);
+			}
+			int offset_indirect = ceil(max(node->size - 5 * BLOCKSIZE, 0) / sizeof(uint32_t));
+			read_block(mem_diskptr, node->indirect, temp_block);
+			int* ptr = temp_block;
+
+
+		}
+		node->size += length;
+	}
+	//validating offset
+	/*
+		load super_block into &sb
+		load inode_bitmap into bitmap
+		check if the inode is present by bitmap[inumber] == 1
+		blocknum = (sb.first_inode_block + inumber)/8, offset_inside_blocknum = (same cheez)%8
+		retirieve that block with blocknum
+		retrieve that inode from this block
+		for offset = givenoffset; keep running:
+		    if offset is < 5*BLOCK_SIZE
+		        retrieve that direct block
+		    else
+		         retrieve that indirect indirect pointer and usme retrieve data block
+		    from the retrieved data block given offset read
+		    toread = BLOCK_SIZE;
+		    if( length <= BLOCK_SIZE ){
+		        toread = length;
+		    }
+		    update the offset by offset += toread
+		    length -= toread
+	*/
+	// mem_bitmap = {sb.};
+	if (offset < 5 * BLOCKSIZE) {
+		int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, read_bytes;
+		for (; start_idx < 5; start_idx++) {
+			read_bytes = BLOCKSIZE;
+			if (length < BLOCKSIZE) {
+				read_bytes = length;
+			}
+			memcpy(temp_block, data, read_bytes);
+			write_block(mem_diskptr, node->direct[start_idx], temp_block);
+			data += read_bytes;
+			length -= read_bytes;
+		}
+	}
+	DECL_BLOCK(indirect);
+	if (length > 0) {
+		read_block(mem_diskptr, node->indirect, indirect);
+		int* ptr = indirect, read_bytes;
+		for (; ptr < indirect + BLOCKSIZE; ptr++) {
+			read_bytes = BLOCKSIZE;
+			if (length < BLOCKSIZE) {
+				read_bytes = length;
+			}
+			if (mem_bitmap.bitmap_data[*ptr] == 0) {
+				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
+					have had their bit set according to the size of file inode\n");
+				break;
+			}
+			read_block(mem_diskptr, *ptr, temp_block);
+			memcpy(data, temp_block, read_bytes);
+			data += read_bytes;
+			length -= read_bytes;
+		}
+	}
+	FREE_BLOCK(indirect);
+	free(node);
+	return 0;
+}

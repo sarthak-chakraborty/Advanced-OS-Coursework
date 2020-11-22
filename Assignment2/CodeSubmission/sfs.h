@@ -1,10 +1,10 @@
+#ifndef SFS_H
+#define SFS_H
 #include<stdint.h>
 #include<math.h>
 #include <stdio.h>
 #include<stdlib.h>
 #include "disk.h"
-#ifndef SFS_H
-#define SFS_H
 const static uint32_t MAGIC = 12345;
 
 typedef struct inode {
