@@ -17,6 +17,7 @@ typedef struct bitmap_m {
 } bitmap_m;
 bitmap_m mem_bitmap;
 
+
 uint32_t max(uint32_t x, uint32_t y) {
 	if (x > y)return x;
 	return y;
@@ -185,14 +186,13 @@ int mount(disk *diskptr) {
 	memcpy(&sb, temp_block, sizeof(super_block));
 
 
-
 	if (sb.magic_number != MAGIC) {
 		printf("[ERROR] __Magic Number verification failed__\n [ERROR] __Mounting the file system failed__\n\n");
 		return -1;
 	}
 
 	/*
-	TODO: load bitmaps and mounted file descriptor in the memory
+	Load Inode Bitmap in the memory
 	*/
 	int inode_bitmap_block_start = sb.inode_bitmap_block_idx;
 	int inode_bitmap_block_end = sb.data_block_bitmap_idx - 1;
@@ -212,6 +212,32 @@ int mount(disk *diskptr) {
 			ret = read_block(mem_diskptr, i, (mem_bitmap.bitmap_inode + block_addr * BLOCKSIZE));
 			if (ret == -1) {
 				printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
+				return -1;
+			}
+		}
+	}
+
+	/*
+	Load Data Bitmap in the memory
+	*/
+	int data_bitmap_block_start = sb.data_block_bitmap_idx;
+	int data_bitmap_block_end = sb.inode_block_idx - 1;
+
+	mem_bitmap.bitmap_data = (bitmap_t)malloc((sb.data_blocks + 7) / 8);
+
+	if (data_bitmap_block_start == data_bitmap_block_end) {
+		ret = read_block(mem_diskptr, data_bitmap_block_start, mem_bitmap.bitmap_data);
+		if (ret == -1) {
+			printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
+			return -1;
+		}
+	}
+	else {
+		for (int i = data_bitmap_block_start; i < data_bitmap_block_end; i++) {
+			int block_addr = i - data_bitmap_block_start;
+			ret = read_block(mem_diskptr, i, (mem_bitmap.bitmap_data + block_addr * BLOCKSIZE));
+			if (ret == -1) {
+				printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
 				return -1;
 			}
 		}
@@ -318,6 +344,28 @@ int remove_file(int inumber) {
 	node->valid = 0;
 	unset_bitmap(mem_bitmap.bitmap_inode, inumber);
 
+	/* Unset Data Bitmap */
+	if(node->size > 0){
+		int start_idx = node->size / BLOCKSIZE;
+		if (node->size < 5 * BLOCKSIZE) {
+			for (; start_idx < 5; start_idx++) {
+				unset_bitmap(mem_bitmap.bitmap_data, node->direct[start_idx]);
+			}
+		}
+		else {
+			start_idx -= 5;
+		}
+		DECL_BLOCK(indirect);
+		read_block(mem_diskptr, node->indirect, indirect);
+		int* ptr = indirect;
+		ptr += start_idx;
+		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+			unset_bitmap(mem_bitmap.bitmap_data, *ptr);
+		}
+
+		FREE_BLOCK(indirect);
+	}
+
 	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
 	// memcpy(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE, node, sizeof(*node));
 
@@ -352,8 +400,17 @@ int remove_file(int inumber) {
 
 
 int stat(int inumer) {
-	int ret;
+	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
+		printf("[ERROR] __Return Stat failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
 
+	if (!get_bitmap(mem_bitmap.bitmap_inode, inumer)) {
+		printf("[ERROR] __Return Stat failed__\n [ERROR] __Inode number is not set__\n\n");
+		return -1;
+	}
+
+	int ret;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
 		printf("@stat reading super_block ERROR\n");
 		return -1; //error in read
@@ -394,25 +451,28 @@ int read_i(int inumber, char *data, int length, int offset) {
 	}
 	super_block sb;
 	memcpy(&sb, temp_block, sizeof(super_block));
+
 	//validating inode number
-	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0) {
+	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0 || offset > 1029*BLOCKSIZE){
+		printf("[ERROR] __Read_i failed__\n [ERROR] __Invalid Arguments__\n\n");
 		return -1;
 	}
+
 	//validating inode
 	inode *node = retrieve_inode(&sb, inumber);
 	if (node == NULL) {
-		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[ERROR] __Read_i failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
+
 	if (node->valid == 0) {
-		free(node);
 		printf("[ERROR] @read_i file doesn't contain requested amount of data\n");
 		return -1;
 	}
 	if (node->size - offset < length) { // requested length is greater than data present after offset
 		length = node->size - offset;
 	}
-	//validating offset
+
 	/*
 		load super_block into &sb
 		load inode_bitmap into bitmap
@@ -583,6 +643,43 @@ int write_i(int inumber, char *data, int length, int offset) {
 		}
 	}
 	FREE_BLOCK(indirect);
-	free(node);
+}
+
+
+int create_dir(char *dirpath){
+	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
+
+	int ret;
+	super_block sb;
+	if (read_block(mem_diskptr, 0, temp_block) < 0) {
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Super Block read failed__\n\n");
+		return -1;
+	}
+	memcpy(&sb, temp_block, sizeof(super_block));
+
+	/* Get the root directory data block
+	   First Inode is reserved for root directory
+	*/
+	inode *node = retrieve_inode(&sb, 0);
+	if (node == NULL) {
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
+		return -1;
+	}
+
+
+	char *token;
+	token = strtok(dirpath, "/");
+	if(token == NULL){
+		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
+		return -1;
+	}
+	while(token != NULL){
+		
+		token = strtok(NULL, "/");
+	}
+
 	return 0;
 }
