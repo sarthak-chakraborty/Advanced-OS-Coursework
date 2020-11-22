@@ -6,7 +6,7 @@
 #include<stdlib.h>
 #include "disk.h"
 const static uint32_t MAGIC = 12345;
-
+const static uint32_t MAXFILESIZE = (5 + 1024) * BLOCKSIZE;
 typedef struct inode {
 	uint32_t valid; // 0 if invalid
 	uint32_t size; // logical size of the file

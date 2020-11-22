@@ -21,7 +21,10 @@ uint32_t max(uint32_t x, uint32_t y) {
 	if (x > y)return x;
 	return y;
 }
-
+uint32_t min(uint32_t x, uint32_t y) {
+	if (x < y)return x;
+	return y;
+}
 void set_bitmap(bitmap_t b, int i) {
 	b[i / 8] |= 1 << (i & 7);
 }
@@ -44,7 +47,15 @@ inode* retrieve_inode(super_block* sb, int inumber) {
 		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
 	return node;
 }
-
+int write_inode(super_block* sb, int inumber, inode *node) {
+	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
+	memcpy(temp_block, node, sizeof(inode));
+	if (write_block(mem_diskptr, iblock + sb->inode_block_idx, temp_block) < 0) {
+		printf("ERROR @write_inode writing inode to disk\n");
+		return -1;
+	}
+	return 0;
+}
 
 int format(disk *diskptr) {
 	super_block sb;
@@ -434,27 +445,32 @@ int read_i(int inumber, char *data, int length, int offset) {
 		    length -= toread
 	*/
 	// mem_bitmap = {sb.};
+	int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_toread;
 	if (offset < 5 * BLOCKSIZE) {
-		int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, read_bytes;
 		for (; start_idx < 5; start_idx++) {
-			read_bytes = BLOCKSIZE;
-			if (length < BLOCKSIZE) {
-				read_bytes = length;
+			bytes_toread = BLOCKSIZE - block_offset;
+			if (length < bytes_toread) {
+				bytes_toread = length;
 			}
 			read_block(mem_diskptr, node->direct[start_idx], temp_block);
-			memcpy(data, temp_block, read_bytes);
-			data += read_bytes;
-			length -= read_bytes;
+			memcpy(data, temp_block, bytes_toread);
+			data += bytes_toread;
+			length -= bytes_toread;
+			block_offset = 0;
 		}
+	}
+	else {
+		start_idx -= 5;
 	}
 	DECL_BLOCK(indirect);
 	if (length > 0) {
 		read_block(mem_diskptr, node->indirect, indirect);
-		int* ptr = indirect, read_bytes;
-		for (; ptr < indirect + BLOCKSIZE; ptr++) {
-			read_bytes = BLOCKSIZE;
-			if (length < BLOCKSIZE) {
-				read_bytes = length;
+		int* ptr = indirect;
+		ptr += start_idx;
+		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+			bytes_toread = BLOCKSIZE - block_offset;
+			if (length < bytes_toread) {
+				bytes_toread = length;
 			}
 			if (mem_bitmap.bitmap_data[*ptr] == 0) {
 				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
@@ -462,16 +478,33 @@ int read_i(int inumber, char *data, int length, int offset) {
 				break;
 			}
 			read_block(mem_diskptr, *ptr, temp_block);
-			memcpy(data, temp_block, read_bytes);
-			data += read_bytes;
-			length -= read_bytes;
+			memcpy(data, temp_block, bytes_toread);
+			data += bytes_toread;
+			length -= bytes_toread;
+			block_offset = 0;
 		}
 	}
 	FREE_BLOCK(indirect);
 	free(node);
 	return 0;
 }
-
+int* get_empty_blocks(int req_num_blocks) {
+	int* block_ids = malloc(req_num_blocks * sizeof(int));
+	if (read_block(mem_diskptr, 0, temp_block) < 0) {
+		printf("@get_empty_blocks reading super_block ERROR\n");
+		return -1; //error in read
+	}
+	super_block sb;
+	memcpy(&sb, temp_block, sizeof(super_block));
+	/* Find the leftmost unset bit */
+	int free_inode_pos = -1, idx = 0;
+	for (int i = 0; i < sb.data_blocks && idx < req_num_blocks; i++) {
+		if (get_bitmap(mem_bitmap.bitmap_data, i)) {
+			block_ids[idx++] = i + sb.data_block_idx;
+		}
+	}
+	return block_ids;
+}
 
 int write_i(int inumber, char *data, int length, int offset) {
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
@@ -495,6 +528,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 		printf("[ERROR] @write_i file doesn't contain requested amount of data\n");
 		return -1;
 	}
+	length = min(length, MAXFILESIZE - offset);
 	if (node->size - offset < length) { // requested length is greater than data present after offset
 		// length = node->size - offset;
 		/*Need to extend file size*/
@@ -505,10 +539,8 @@ int write_i(int inumber, char *data, int length, int offset) {
 			return -1;
 		}
 		int i = 0;
-		for (i = 0; i < req_num_blocks; i++) {
-
-
-		}
+		// for (i = 0; i < req_num_blocks; i++) {
+		// }
 		if (floor((node->size) / BLOCKSIZE) + 1 < 5) {
 			int idx = floor((node->size) / BLOCKSIZE) + 1;
 			for (; idx < 5 && i < req_num_blocks; i++) {
@@ -516,60 +548,49 @@ int write_i(int inumber, char *data, int length, int offset) {
 			}
 		}
 		if (i < req_num_blocks) {
-			if (node->indirect == -1) {
+			if (node->size <= 5 * BLOCKSIZE) { // this means that an indirect block has not been allocated
 				node->indirect = *get_empty_blocks(1);
 			}
 			int offset_indirect = ceil(max(node->size - 5 * BLOCKSIZE, 0) / sizeof(uint32_t));
 			read_block(mem_diskptr, node->indirect, temp_block);
 			int* ptr = temp_block;
-
-
-		}
-		node->size += length;
-	}
-	//validating offset
-	/*
-		load super_block into &sb
-		load inode_bitmap into bitmap
-		check if the inode is present by bitmap[inumber] == 1
-		blocknum = (sb.first_inode_block + inumber)/8, offset_inside_blocknum = (same cheez)%8
-		retirieve that block with blocknum
-		retrieve that inode from this block
-		for offset = givenoffset; keep running:
-		    if offset is < 5*BLOCK_SIZE
-		        retrieve that direct block
-		    else
-		         retrieve that indirect indirect pointer and usme retrieve data block
-		    from the retrieved data block given offset read
-		    toread = BLOCK_SIZE;
-		    if( length <= BLOCK_SIZE ){
-		        toread = length;
-		    }
-		    update the offset by offset += toread
-		    length -= toread
-	*/
-	// mem_bitmap = {sb.};
-	if (offset < 5 * BLOCKSIZE) {
-		int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, read_bytes;
-		for (; start_idx < 5; start_idx++) {
-			read_bytes = BLOCKSIZE;
-			if (length < BLOCKSIZE) {
-				read_bytes = length;
+			for (; ptr < temp_block + BLOCKSIZE && i < req_num_blocks; i++) {
+				*ptr = block_ids[i];
+				ptr++;
 			}
-			memcpy(temp_block, data, read_bytes);
-			write_block(mem_diskptr, node->direct[start_idx], temp_block);
-			data += read_bytes;
-			length -= read_bytes;
+			write_block(mem_diskptr, node->indirect, temp_block);
 		}
+		free(block_ids);
+	}
+	node->size = offset + length;
+
+	/*we have extended the file size if required, now need to copy content to it*/
+	int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_toread;
+	if (offset < 5 * BLOCKSIZE) {/*if offeset lies in direct blocks*/
+		for (; start_idx < 5; start_idx++) {
+			bytes_toread = BLOCKSIZE - block_offset;
+			if (length < bytes_toread) {
+				bytes_toread = length;
+			}
+			read_block(mem_diskptr, node->direct[start_idx], temp_block);
+			memcpy(temp_block + block_offset, data, bytes_toread);
+			write_block(mem_diskptr, node->direct[start_idx], temp_block);
+			data += bytes_toread;
+			length -= bytes_toread;
+			block_offset = 0;
+		}
+	}
+	else {
+		start_idx -= 5;
 	}
 	DECL_BLOCK(indirect);
 	if (length > 0) {
 		read_block(mem_diskptr, node->indirect, indirect);
-		int* ptr = indirect, read_bytes;
-		for (; ptr < indirect + BLOCKSIZE; ptr++) {
-			read_bytes = BLOCKSIZE;
+		int* ptr = indirect + start_idx, bytes_toread;
+		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+			bytes_toread = BLOCKSIZE - block_offset;
 			if (length < BLOCKSIZE) {
-				read_bytes = length;
+				bytes_toread = length;
 			}
 			if (mem_bitmap.bitmap_data[*ptr] == 0) {
 				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
@@ -577,11 +598,15 @@ int write_i(int inumber, char *data, int length, int offset) {
 				break;
 			}
 			read_block(mem_diskptr, *ptr, temp_block);
-			memcpy(data, temp_block, read_bytes);
-			data += read_bytes;
-			length -= read_bytes;
+			memcpy(temp_block + block_offset, data, bytes_toread);
+			write_block(mem_diskptr, *ptr, temp_block);
+			data += bytes_toread;
+			length -= bytes_toread;
+			block_offset = 0;
 		}
 	}
+	write_block(mem_diskptr, node->indirect, indirect);
+	write_inode(&sb, inumber, node);
 	FREE_BLOCK(indirect);
 	free(node);
 	return 0;
