@@ -38,14 +38,14 @@ int read_block(disk *diskptr, int blocknr, void *block_data) {
 	int n_blocks = diskptr->blocks;
 
 	if (blocknr < 0 || blocknr > n_blocks - 1) {
-		printf("[ERROR] __Invalid Block access__\n\n");
+		printf("[ERROR] @read_block __Invalid Block access__ blocknr = %d\n\n", blocknr);
 		return -1;
 	}
 
 	memcpy(block_data, diskptr->block_arr[blocknr], BLOCKSIZE);
 
 	if (block_data == NULL) {
-		printf("[ERROR] __Copy to data buffer from disk memory failed__\n\n");
+		printf("[ERROR] @read_block __Copy to data buffer from disk memory failed__\n\n");
 		return -1;
 	}
 
@@ -59,14 +59,14 @@ int write_block(disk *diskptr, int blocknr, void *block_data) {
 	int n_blocks = diskptr->blocks;
 
 	if (blocknr < 0 || blocknr > n_blocks - 1) {
-		printf("[ERROR] __Invalid Block access__\n\n");
+		printf("[ERROR] @write_block __Invalid Block access__\n\n");
 		return -1;
 	}
 
 	memcpy(diskptr->block_arr[blocknr], (char *)block_data, BLOCKSIZE);
 
 	if (diskptr->block_arr[blocknr] == NULL) {
-		printf("[ERROR] __Copy to disk memory from data buffer failed__\n\n");
+		printf("[ERROR] @write_block __Copy to disk memory from data buffer failed__\n\n");
 		return -1;
 	}
 

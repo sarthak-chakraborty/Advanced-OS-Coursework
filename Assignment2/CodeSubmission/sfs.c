@@ -18,11 +18,11 @@ typedef struct bitmap_m {
 bitmap_m mem_bitmap;
 
 
-uint32_t max(uint32_t x, uint32_t y) {
+int max(int x, int y) {
 	if (x > y)return x;
 	return y;
 }
-uint32_t min(uint32_t x, uint32_t y) {
+int min(int x, int y) {
 	if (x < y)return x;
 	return y;
 }
@@ -40,19 +40,23 @@ int get_bitmap(bitmap_t b, int i) {
 
 
 inode* retrieve_inode(super_block* sb, int inumber) {
-	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
+	int iblock = floor((inumber) / (BLOCKSIZE / 8)), offset = (inumber) % (BLOCKSIZE / 8);
 
-	inode *node = NULL;
+	inode *node = (inode*)malloc(sizeof(inode));
 	// bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
-	if (get_bitmap(mem_bitmap.bitmap_inode, inumber))
-		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
+	// if (get_bitmap(mem_bitmap.bitmap_inode, inumber))
+	read_block(mem_diskptr, (iblock) + sb->inode_block_idx, temp_block);
+	// node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
+	memcpy(node, temp_block + offset * 8, sizeof(inode));
 	return node;
 }
 int write_inode(super_block* sb, int inumber, inode *node) {
-	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
-	memcpy(temp_block, node, sizeof(inode));
+	int iblock = floor((inumber) / (BLOCKSIZE / 8)), offset = (inumber) % (BLOCKSIZE / 8);
+	read_block(mem_diskptr, iblock, temp_block);
+	memcpy(temp_block + offset * 8, node, sizeof(inode));
+	printf("[sfs] @write_inode after write_i iblock(%d) + sb->inode_block_idx(%d)\n", iblock, sb->inode_block_idx);
 	if (write_block(mem_diskptr, iblock + sb->inode_block_idx, temp_block) < 0) {
-		printf("ERROR @write_inode writing inode to disk\n");
+		printf("[sfs] ERROR @write_inode writing inode to disk\n");
 		return -1;
 	}
 	return 0;
@@ -66,9 +70,9 @@ int format(disk *diskptr) {
 	N = diskptr->blocks;
 	M = N - 1;
 	I = floor(0.1 * M);
-	IB = ceil((I * 128) / (8 * BLOCKSIZE));
+	IB = ceil((double)(I * 128) / (8 * BLOCKSIZE));
 	R = M - I - IB;
-	DBB = ceil(R / (8 * BLOCKSIZE));
+	DBB = ceil((double)R / (8 * BLOCKSIZE));
 	DB = R - DBB;
 	/* Initialize Super Block */
 	sb.magic_number = 12345;
@@ -80,12 +84,15 @@ int format(disk *diskptr) {
 	sb.data_block_bitmap_idx = 1 + IB;
 	sb.data_block_idx = 1 + IB + DBB + I;
 	sb.data_blocks = DB;
+	printf("[sfs] N : %d M: %d, I:%d, IB:%d, DBB:%d, DB:%d\n", N, M, I, IB, DBB, DB);
+	printf("[sfs] first_idx >> inode_bitmp : %d, inode: %d, data_bitmp:%d, data:%d\n",
+	       sb.inode_bitmap_block_idx, sb.inode_block_idx, sb.data_block_bitmap_idx, sb.data_block_idx);
 	// setting up a temp block for retrieving all blocks temporarily
 	temp_block = (void*)malloc(BLOCKSIZE);
 
 	ret = write_block(diskptr, 0, &sb);
 	if (ret == -1) {
-		printf("[ERROR] __Super Block writing failed__\n [ERROR] __Format disk failed__\n\n");
+		printf("[sfs] [ERROR] __Super Block writing failed__\n [ERROR] __Format disk failed__\n\n");
 		return -1;
 	}
 
@@ -98,7 +105,7 @@ int format(disk *diskptr) {
 	if (IB == 1) {
 		ret = write_block(diskptr, sb.inode_bitmap_block_idx, bitmap_i);
 		if (ret == -1) {
-			printf("[ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+			printf("[sfs] [ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
 		}
 	}
@@ -110,7 +117,7 @@ int format(disk *diskptr) {
 
 			ret = write_block(diskptr, start_inode_bitmap_block_ids, bitmap_proxy);
 			if (ret == -1) {
-				printf("[ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+				printf("[sfs] [ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 				return -1;
 			}
 
@@ -120,7 +127,7 @@ int format(disk *diskptr) {
 
 		ret = write_block(diskptr, start_inode_bitmap_block_ids, (bitmap_i + (IB - 1) * BLOCKSIZE));
 		if (ret == -1) {
-			printf("[ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+			printf("[sfs] [ERROR] __Inode Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
 		}
 	}
@@ -134,7 +141,7 @@ int format(disk *diskptr) {
 	if (DBB == 1) {
 		ret = write_block(diskptr, sb.data_block_bitmap_idx, bitmap_d);
 		if (ret == -1) {
-			printf("[ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+			printf("[sfs] [ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
 		}
 	}
@@ -146,7 +153,7 @@ int format(disk *diskptr) {
 
 			ret = write_block(diskptr, start_data_bitmap_block_ids, bitmap_proxy);
 			if (ret == -1) {
-				printf("[ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+				printf("[sfs] [ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 				return -1;
 			}
 
@@ -156,7 +163,7 @@ int format(disk *diskptr) {
 
 		ret = write_block(diskptr, start_data_bitmap_block_ids, (bitmap_d + (DBB - 1) * BLOCKSIZE));
 		if (ret == -1) {
-			printf("[ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
+			printf("[sfs] [ERROR] __Data Bitmap initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
 		}
 	}
@@ -177,7 +184,7 @@ int format(disk *diskptr) {
 		}
 		ret = write_block(diskptr, sb.inode_block_idx + block_idx, nodes_in_block);
 		if (ret == -1) {
-			printf("[ERROR] __Inode initialization failed__\n [ERROR] __Format disk failed__\n\n");
+			printf("[sfs] [ERROR] __Inode initialization failed__\n [ERROR] __Format disk failed__\n\n");
 			return -1;
 		}
 	}
@@ -189,16 +196,20 @@ int format(disk *diskptr) {
 
 int mount(disk *diskptr) {
 	int ret;
+	mem_diskptr = diskptr;
+	// printf("[sfs] @mount hello0\n");
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@create_file reading super_block ERROR\n");
+		printf("[sfs] @create_file reading super_block ERROR\n");
 		return -1; //error in read
 	}
+	// printf("[sfs] @mount hello1\n");
 	super_block sb;
 	memcpy(&sb, temp_block, sizeof(super_block));
+	// printf("[sfs] @mount hello2\n");
 
 
 	if (sb.magic_number != MAGIC) {
-		printf("[ERROR] __Magic Number verification failed__\n [ERROR] __Mounting the file system failed__\n\n");
+		printf("[sfs] [ERROR] __Magic Number verification failed__\n [ERROR] __Mounting the file system failed__\n\n");
 		return -1;
 	}
 
@@ -213,7 +224,7 @@ int mount(disk *diskptr) {
 	if (inode_bitmap_block_start == inode_bitmap_block_end) {
 		ret = read_block(mem_diskptr, inode_bitmap_block_start, mem_bitmap.bitmap_inode);
 		if (ret == -1) {
-			printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
+			printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
 			return -1;
 		}
 	}
@@ -222,7 +233,7 @@ int mount(disk *diskptr) {
 			int block_addr = i - inode_bitmap_block_start;
 			ret = read_block(mem_diskptr, i, (mem_bitmap.bitmap_inode + block_addr * BLOCKSIZE));
 			if (ret == -1) {
-				printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
+				printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Disk read for Inode Bitmap failed__\n\n");
 				return -1;
 			}
 		}
@@ -239,7 +250,7 @@ int mount(disk *diskptr) {
 	if (data_bitmap_block_start == data_bitmap_block_end) {
 		ret = read_block(mem_diskptr, data_bitmap_block_start, mem_bitmap.bitmap_data);
 		if (ret == -1) {
-			printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
+			printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
 			return -1;
 		}
 	}
@@ -248,7 +259,7 @@ int mount(disk *diskptr) {
 			int block_addr = i - data_bitmap_block_start;
 			ret = read_block(mem_diskptr, i, (mem_bitmap.bitmap_data + block_addr * BLOCKSIZE));
 			if (ret == -1) {
-				printf("[ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
+				printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Disk read for Data Bitmap failed__\n\n");
 				return -1;
 			}
 		}
@@ -263,12 +274,12 @@ int mount(disk *diskptr) {
 
 int create_file() {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
-		printf("[ERROR] __Create File failed__\n [ERROR] __Disk unmounted__\n\n");
+		printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
 	}
 	int ret;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@create_file reading super_block ERROR\n");
+		printf("[sfs] @create_file reading super_block ERROR\n");
 		return -1; //error in read
 	}
 	super_block sb;
@@ -276,8 +287,10 @@ int create_file() {
 
 	/* Find the leftmost unset bit */
 	int free_inode_pos = -1;
+	printf("[sfs] sb.indodes = %d\n", sb.inodes);
 	for (int i = 0; i < sb.inodes; i++) {
-		if (get_bitmap(mem_bitmap.bitmap_inode, i)) {
+		printf("[sfs] @create_file value of get_bitmap : %d\n", get_bitmap(mem_bitmap.bitmap_inode, i));
+		if (!get_bitmap(mem_bitmap.bitmap_inode, i)) {
 			free_inode_pos = i;
 			break;
 		}
@@ -286,7 +299,7 @@ int create_file() {
 	/* Update Inode Informtion */
 	inode *node = retrieve_inode(&sb, free_inode_pos);
 	if (node == NULL) {
-		printf("[ERROR] __Create File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 
@@ -304,7 +317,7 @@ int create_file() {
 	if (inode_bitmap_block_start == inode_bitmap_block_end) {
 		ret = write_block(mem_diskptr, sb.inode_bitmap_block_idx, mem_bitmap.bitmap_inode);
 		if (ret == -1) {
-			printf("[ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+			printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
 			return -1;
 		}
 	}
@@ -316,31 +329,32 @@ int create_file() {
 
 			ret = write_block(mem_diskptr, i, bitmap_proxy);
 			if (ret == -1) {
-				printf("[ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+				printf("[sfs] [ERROR] __Create File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
 				return -1;
 			}
 			free(bitmap_proxy);
 		}
 	}
-
+	printf("[sfs] create file is a SUCESS\n");
+	write_inode(&sb, free_inode_pos, node);
 	return free_inode_pos;
 }
 
 
 int remove_file(int inumber) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
-		printf("[ERROR] __Remove File failed__\n [ERROR] __Disk unmounted__\n\n");
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
 	}
 
 	if (!get_bitmap(mem_bitmap.bitmap_inode, inumber)) {
-		printf("[ERROR] __Remove File failed__\n [ERROR] __Inode number is not set__\n\n");
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Inode number is not set__\n\n");
 		return -1;
 	}
 
 	int ret;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@remove_file reading super_block ERROR\n");
+		printf("[sfs] @remove_file reading super_block ERROR\n");
 		return -1; //error in read
 	}
 	super_block sb;
@@ -349,7 +363,7 @@ int remove_file(int inumber) {
 	/* Update Inode Informtion */
 	inode *node = retrieve_inode(&sb, inumber);
 	if (node == NULL) {
-		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 	node->valid = 0;
@@ -387,7 +401,7 @@ int remove_file(int inumber) {
 	if (inode_bitmap_block_start == inode_bitmap_block_end) {
 		ret = write_block(mem_diskptr, sb.inode_bitmap_block_idx, mem_bitmap.bitmap_inode);
 		if (ret == -1) {
-			printf("[ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+			printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
 			return -1;
 		}
 	}
@@ -399,7 +413,7 @@ int remove_file(int inumber) {
 
 			ret = write_block(mem_diskptr, i, bitmap_proxy);
 			if (ret == -1) {
-				printf("[ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
+				printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Inode Bitmap Write failed__\n\n");
 				return -1;
 			}
 			free(bitmap_proxy);
@@ -414,7 +428,7 @@ int remove_file(int inumber) {
 	if (data_bitmap_block_start == data_bitmap_block_end) {
 		ret = write_block(mem_diskptr, sb.data_block_bitmap_idx, mem_bitmap.bitmap_data);
 		if (ret == -1) {
-			printf("[ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
+			printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
 			return -1;
 		}
 	}
@@ -426,7 +440,7 @@ int remove_file(int inumber) {
 
 			ret = write_block(mem_diskptr, i, bitmap_proxy);
 			if (ret == -1) {
-				printf("[ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
+				printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Data Bitmap Write failed__\n\n");
 				return -1;
 			}
 			free(bitmap_proxy);
@@ -439,18 +453,18 @@ int remove_file(int inumber) {
 
 int stat(int inumer) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
-		printf("[ERROR] __Return Stat failed__\n [ERROR] __Disk unmounted__\n\n");
+		printf("[sfs] [ERROR] __Return Stat failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
 	}
 
 	if (!get_bitmap(mem_bitmap.bitmap_inode, inumer)) {
-		printf("[ERROR] __Return Stat failed__\n [ERROR] __Inode number is not set__\n\n");
+		printf("[sfs] [ERROR] __Return Stat failed__\n [ERROR] __Inode number is not set__\n\n");
 		return -1;
 	}
 
 	int ret;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@stat reading super_block ERROR\n");
+		printf("[sfs] @stat reading super_block ERROR\n");
 		return -1; //error in read
 	}
 	super_block sb;
@@ -459,7 +473,7 @@ int stat(int inumer) {
 
 	inode *node = retrieve_inode(&sb, inumer);
 	if (node == NULL) {
-		printf("[ERROR] __Print Stat failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Print Stat failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 	uint32_t size = node->size;
@@ -467,11 +481,11 @@ int stat(int inumer) {
 	uint32_t num_indirect_pointers = (size > 5 * BLOCKSIZE) ? ceil((size - 5 * BLOCKSIZE) / BLOCKSIZE) : 0;
 	uint32_t num_data_blocks = (num_indirect_pointers == 0) ? num_direct_pointers : num_direct_pointers + num_indirect_pointers + 1;
 
-	printf("[SUCCESS] __Inode Information fetched successfully__\n");
-	printf("Logical Size: %d\n", size);
-	printf("Number of Data Blocks in Use: %d\n", num_data_blocks);
-	printf("Number of direct pointers: %d", num_direct_pointers);
-	printf("Number of indirect pointers: %d", num_indirect_pointers);
+	printf("[sfs] [SUCCESS] __Inode Information fetched successfully__\n");
+	printf("[sfs] Logical Size: %d\n", size);
+	printf("[sfs] Number of Data Blocks in Use: %d\n", num_data_blocks);
+	printf("[sfs] Number of direct pointers: %d", num_direct_pointers);
+	printf("[sfs] Number of indirect pointers: %d", num_indirect_pointers);
 
 	return 0;
 }
@@ -483,8 +497,17 @@ char* retrieve_data_block(super_block* sb, int block_idx) {
 
 
 int read_i(int inumber, char *data, int length, int offset) {
+	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
+
+	if (!get_bitmap(mem_bitmap.bitmap_inode, inumber)) {
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Inode number is not set__\n\n");
+		return -1;
+	}
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@read_i reading super_block ERROR\n");
+		printf("[sfs] @read_i reading super_block ERROR\n");
 		return -1; //error in read
 	}
 	super_block sb;
@@ -492,25 +515,25 @@ int read_i(int inumber, char *data, int length, int offset) {
 
 	//validating inode number
 	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0 || offset > 1029 * BLOCKSIZE) {
-		printf("[ERROR] __Read_i failed__\n [ERROR] __Invalid Arguments__\n\n");
+		printf("[sfs] [ERROR] __Read_i failed__\n [ERROR] __Invalid Arguments__\n\n");
 		return -1;
 	}
 
 	//validating inode
 	inode *node = retrieve_inode(&sb, inumber);
 	if (node == NULL) {
-		printf("[ERROR] __Read_i failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Read_i failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 
 	if (node->valid == 0) {
-		printf("[ERROR] @read_i file doesn't contain requested amount of data\n");
+		printf("[sfs] [ERROR] @read_i file doesn't contain requested amount of data\n");
 		return -1;
 	}
 	if (node->size - offset < length) { // requested length is greater than data present after offset
 		length = node->size - offset;
 	}
-
+	int total_data_read = 0;
 	/*
 		load super_block into &sb
 		load inode_bitmap into bitmap
@@ -532,15 +555,21 @@ int read_i(int inumber, char *data, int length, int offset) {
 		    length -= toread
 	*/
 	// mem_bitmap = {sb.};
+	printf("Inode_size:%d, inode->valid:%d, inode->direct[0]:%d, inode->direct[1]:%d\n",
+	       node->size, node->valid, node->direct[0], node->direct[1]);
 	int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_toread;
 	if (offset < 5 * BLOCKSIZE) {
-		for (; start_idx < 5; start_idx++) {
+		for (; length && start_idx < 5; start_idx++) {
 			bytes_toread = BLOCKSIZE - block_offset;
 			if (length < bytes_toread) {
 				bytes_toread = length;
 			}
-			read_block(mem_diskptr, node->direct[start_idx], temp_block);
+			if (read_block(mem_diskptr, node->direct[start_idx], temp_block) < 0) {
+				printf("[sfs] @read_i reading from direct block (node->direct[%d] = %d) ERROR\n", start_idx, node->direct[start_idx]);
+				return -1; //error in read
+			}
 			memcpy(data, temp_block, bytes_toread);
+			total_data_read += bytes_toread;
 			data += bytes_toread;
 			length -= bytes_toread;
 			block_offset = 0;
@@ -549,36 +578,40 @@ int read_i(int inumber, char *data, int length, int offset) {
 	else {
 		start_idx -= 5;
 	}
-	DECL_BLOCK(indirect);
-	if (length > 0) {
+	if (start_idx >= 0 && length > 0) {
+		DECL_BLOCK(indirect);
 		read_block(mem_diskptr, node->indirect, indirect);
 		int* ptr = indirect;
 		ptr += start_idx;
-		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+		for (; length && ((void*)ptr < indirect + (node->size - 5 * BLOCKSIZE)); ptr++) {
 			bytes_toread = BLOCKSIZE - block_offset;
 			if (length < bytes_toread) {
 				bytes_toread = length;
 			}
 			if (mem_bitmap.bitmap_data[*ptr] == 0) {
-				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
+				printf("[sfs] GRAVE INCONSISTENCIES!!! some of the blocks should \
 					have had their bit set according to the size of file inode\n");
 				break;
 			}
-			read_block(mem_diskptr, *ptr, temp_block);
+			if (read_block(mem_diskptr, *ptr, temp_block) < 0) {
+				printf("[sfs] @read_i reading from indirect block (*ptr = %d) ERROR\n", *ptr);
+				return -1; //error in read
+			}
 			memcpy(data, temp_block, bytes_toread);
+			total_data_read += bytes_toread;
 			data += bytes_toread;
 			length -= bytes_toread;
 			block_offset = 0;
 		}
+		FREE_BLOCK(indirect);
 	}
-	FREE_BLOCK(indirect);
 	free(node);
-	return 0;
+	return total_data_read;
 }
 int* get_empty_blocks(int req_num_blocks) {
 	int* block_ids = malloc(req_num_blocks * sizeof(int));
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@get_empty_blocks reading super_block ERROR\n");
+		printf("[sfs] @get_empty_blocks reading super_block ERROR\n");
 		return NULL; //error in read
 	}
 	super_block sb;
@@ -586,16 +619,27 @@ int* get_empty_blocks(int req_num_blocks) {
 	/* Find the leftmost unset bit */
 	int free_inode_pos = -1, idx = 0;
 	for (int i = 0; i < sb.data_blocks && idx < req_num_blocks; i++) {
-		if (get_bitmap(mem_bitmap.bitmap_data, i)) {
+		if (!get_bitmap(mem_bitmap.bitmap_data, i)) {
 			block_ids[idx++] = i + sb.data_block_idx;
+			set_bitmap(mem_bitmap.bitmap_data, i);
+			printf("[sfs] @get_empty_blocks found an empty block on %d\n", block_ids[idx - 1]);
 		}
 	}
 	return block_ids;
 }
 
 int write_i(int inumber, char *data, int length, int offset) {
+	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Disk unmounted__\n\n");
+		return -1;
+	}
+
+	if (!get_bitmap(mem_bitmap.bitmap_inode, inumber)) {
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Inode number is not set__\n\n");
+		return -1;
+	}
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@read_i reading super_block ERROR\n");
+		printf("[sfs] @read_i reading super_block ERROR\n");
 		return -1; //error in read
 	}
 	super_block sb;
@@ -607,63 +651,85 @@ int write_i(int inumber, char *data, int length, int offset) {
 	//validating inode
 	inode *node = retrieve_inode(&sb, inumber);
 	if (node == NULL) {
-		printf("[ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Remove File failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 	if (node->valid == 0) {
 		free(node);
-		printf("[ERROR] @write_i file doesn't contain requested amount of data\n");
+		printf("[sfs] [ERROR] @write_i file doesn't contain requested amount of data\n");
 		return -1;
 	}
+	int total_data_written = 0;
 	length = min(length, 1029 * BLOCKSIZE - offset);
+	printf("[sfs] @write_i length to read is %d\n", length);
+	printf("Inode_size:%d, inode->valid:%d, inode->direct[0]:%d, inode->direct[1]:%d\n",
+	       node->size, node->valid, node->direct[0], node->direct[1]);
 	if (node->size - offset < length) { // requested length is greater than data present after offset
 		// length = node->size - offset;
 		/*Need to extend file size*/
-		int req_num_blocks = ceil((length - (node->size - offset)) / BLOCKSIZE);
+		int req_num_blocks = ceil((double)(length - (node->size - offset)) / BLOCKSIZE);
+		printf("[sfs] @write_i req_num_blocks : %d\n", req_num_blocks);
 		int* block_ids = get_empty_blocks(req_num_blocks);
 		if (block_ids == NULL) {
-			printf("@write_i No more space left in the disk\n");
+			printf("[sfs] @write_i No more space left in the disk\n");
 			return -1;
 		}
 		int i = 0;
 		// for (i = 0; i < req_num_blocks; i++) {
 		// }
-		if (floor((node->size) / BLOCKSIZE) + 1 < 5) {
-			int idx = floor((node->size) / BLOCKSIZE) + 1;
+		if (floor((double)(node->size) / BLOCKSIZE) + 1 < 5) {
+			int idx = floor((double)(node->size) / BLOCKSIZE) + 1;
+			if (node->size == 0)idx--;
 			for (; idx < 5 && i < req_num_blocks; i++) {
 				node->direct[idx] = block_ids[i];
+				printf("node->direct[idx=%d]=%d\n", idx, node->direct[idx]);
 			}
 		}
 		if (i < req_num_blocks) {
 			if (node->size <= 5 * BLOCKSIZE) { // this means that an indirect block has not been allocated
 				node->indirect = *get_empty_blocks(1);
 			}
-			int offset_indirect = ceil(max(node->size - 5 * BLOCKSIZE, 0) / sizeof(uint32_t));
-			read_block(mem_diskptr, node->indirect, temp_block);
+			int offset_indirect = ceil((double)max(node->size - 5 * BLOCKSIZE, 0) / sizeof(uint32_t));
+			// read_block(mem_diskptr, node->indirect, temp_block);
+			if (read_block(mem_diskptr, node->indirect, temp_block) < 0) {
+				printf("[sfs] @write_i reading indirect block blocknr = %d ERROR\n", node->indirect);
+				return -1; //error in read
+			}
 			int* ptr = temp_block;
 			for (; (void*)ptr < temp_block + BLOCKSIZE && i < req_num_blocks; i++) {
 				*ptr = block_ids[i];
 				ptr++;
 			}
-			write_block(mem_diskptr, node->indirect, temp_block);
+
+			if (write_block(mem_diskptr, node->indirect, temp_block) < 0) {
+				printf("[sfs] @write_i writing to indirect block blocknr = %d ERROR\n", node->indirect);
+				return -1; //error in read
+			}
 		}
 		free(block_ids);
 	}
 	node->size = offset + length;
 
 	/*we have extended the file size if required, now need to copy content to it*/
-	int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_toread;
+	int start_idx = (double)offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_towrite;
 	if (offset < 5 * BLOCKSIZE) {/*if offeset lies in direct blocks*/
-		for (; start_idx < 5; start_idx++) {
-			bytes_toread = BLOCKSIZE - block_offset;
-			if (length < bytes_toread) {
-				bytes_toread = length;
+		for (; length && (start_idx < 5); start_idx++) {
+			bytes_towrite = BLOCKSIZE - block_offset;
+			if (length < bytes_towrite) {
+				bytes_towrite = length;
 			}
-			read_block(mem_diskptr, node->direct[start_idx], temp_block);
-			memcpy(temp_block + block_offset, data, bytes_toread);
-			write_block(mem_diskptr, node->direct[start_idx], temp_block);
-			data += bytes_toread;
-			length -= bytes_toread;
+			if (read_block(mem_diskptr, node->direct[start_idx], temp_block) < 0) {
+				printf("[sfs] @write_i reading from direct block (node->direct[%d] = %d) ERROR\n", start_idx, node->direct[start_idx]);
+				return -1; //error in read
+			}
+			memcpy(temp_block + block_offset, data, bytes_towrite);
+			if (write_block(mem_diskptr, node->direct[start_idx], temp_block) < 0) {
+				printf("[sfs] @write_i reading from direct block blocknr = %d ERROR\n", node->direct[start_idx]);
+				return -1; //error in read
+			}
+			total_data_written += bytes_towrite;
+			data += bytes_towrite;
+			length -= bytes_towrite;
 			block_offset = 0;
 		}
 	}
@@ -671,43 +737,54 @@ int write_i(int inumber, char *data, int length, int offset) {
 		start_idx -= 5;
 	}
 	DECL_BLOCK(indirect);
-	if (length > 0) {
+	if (length > 0 && start_idx >= 0) {
 		read_block(mem_diskptr, node->indirect, indirect);
-		int* ptr = indirect + start_idx, bytes_toread;
-		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
-			bytes_toread = BLOCKSIZE - block_offset;
+		int* ptr = indirect + start_idx, bytes_towrite;
+		for (; length && ((void*)ptr < indirect + (node->size - 5 * BLOCKSIZE)); ptr++) {
+			bytes_towrite = BLOCKSIZE - block_offset;
 			if (length < BLOCKSIZE) {
-				bytes_toread = length;
+				bytes_towrite = length;
 			}
 			if (mem_bitmap.bitmap_data[*ptr] == 0) {
-				printf("GRAVE INCONSISTENCIES!!! some of the blocks should \
+				printf("[sfs] GRAVE INCONSISTENCIES!!! some of the blocks should \
 					have had their bit set according to the size of file inode\n");
 				break;
 			}
-			read_block(mem_diskptr, *ptr, temp_block);
-			memcpy(temp_block + block_offset, data, bytes_toread);
-			write_block(mem_diskptr, *ptr, temp_block);
-			data += bytes_toread;
-			length -= bytes_toread;
+			if (read_block(mem_diskptr, *ptr, temp_block) < 0) {
+				printf("[sfs] @write_i reading from indirect block (*ptr = %d) ERROR\n", *ptr);
+				return -1; //error in read
+			}
+			memcpy(temp_block + block_offset, data, bytes_towrite);
+			if (write_block(mem_diskptr, *ptr, temp_block) < 0) {
+				printf("[sfs] @write_i writing to indirect block (*ptr = %d) ERROR\n", *ptr);
+				return -1; //error in read
+			}
+			total_data_written += bytes_towrite;
+			data += bytes_towrite;
+			length -= bytes_towrite;
 			block_offset = 0;
 		}
+		if (write_block(mem_diskptr, node->indirect, indirect) < 0) {
+			printf("[sfs] @write_i writing back indirect block to disk (node->indirect = %d)ERROR\n", node->indirect);
+		}
 	}
-	write_block(mem_diskptr, node->indirect, indirect);
-	write_inode(&sb, inumber, node);
 	FREE_BLOCK(indirect);
+	write_inode(&sb, inumber, node);
+	free(node);
+	return total_data_written;
 }
 
 
 int create_dir(char *dirpath) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
-		printf("[ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
+		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
 	}
 
 	int ret;
 	super_block sb;
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("[ERROR] __Create Directory failed__\n [ERROR] __Super Block read failed__\n\n");
+		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Super Block read failed__\n\n");
 		return -1;
 	}
 	memcpy(&sb, temp_block, sizeof(super_block));
@@ -717,7 +794,7 @@ int create_dir(char *dirpath) {
 	*/
 	inode *node = retrieve_inode(&sb, 0);
 	if (node == NULL) {
-		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
+		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
 	}
 
@@ -725,7 +802,7 @@ int create_dir(char *dirpath) {
 	char *token;
 	token = strtok(dirpath, "/");
 	if (token == NULL) {
-		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
+		printf("[sfs] [ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
 		return -1;
 	}
 	while (token != NULL) {
