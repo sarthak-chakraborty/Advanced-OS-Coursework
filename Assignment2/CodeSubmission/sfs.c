@@ -1,4 +1,9 @@
-
+/*Assignment 1
+------------------------------------------
+Sankalp R. 16CS30031
+Sarthak Charkraborty 16CS30044
+------------------------------------------
+*/
 #include "sfs.h"
 
 
@@ -371,24 +376,26 @@ int remove_file(int inumber) {
 
 	/* Unset Data Bitmap */
 	if (node->size > 0) {
-		int start_idx = node->size / BLOCKSIZE;
+		int end_idx = node->size / BLOCKSIZE, start_idx = 0;
 		if (node->size < 5 * BLOCKSIZE) {
-			for (; start_idx < 5; start_idx++) {
+			for (; start_idx <= min(end_idx, 4); start_idx++) {
 				unset_bitmap(mem_bitmap.bitmap_data, node->direct[start_idx]);
 			}
 		}
-		else {
-			start_idx -= 5;
-		}
-		DECL_BLOCK(indirect);
-		read_block(mem_diskptr, node->indirect, indirect);
-		int* ptr = indirect;
-		ptr += start_idx;
-		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
-			unset_bitmap(mem_bitmap.bitmap_data, *ptr);
-		}
+		start_idx -= 5;
+		if (start_idx >= 0) {
+			DECL_BLOCK(indirect);
+			if (read_block(mem_diskptr, node->indirect, indirect) < 0) {
+				printf("[sfs] [ERROR] @remove_file read_block error (node->indirect=%d)\n", node->indirect );
+			}
+			int* ptr = indirect;
+			ptr += start_idx;
+			for (; ((void*)ptr < indirect + (node->size - 5 * BLOCKSIZE)); ptr++) {
+				unset_bitmap(mem_bitmap.bitmap_data, *ptr);
+			}
 
-		FREE_BLOCK(indirect);
+			FREE_BLOCK(indirect);
+		}
 	}
 
 	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
@@ -446,7 +453,8 @@ int remove_file(int inumber) {
 			free(bitmap_proxy);
 		}
 	}
-
+	write_inode(&sb, inumber, node);
+	free(node);
 	return 0;
 }
 

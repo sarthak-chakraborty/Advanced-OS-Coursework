@@ -1,3 +1,9 @@
+/*Assignment 1
+------------------------------------------
+Sankalp R. 16CS30031
+Sarthak Charkraborty 16CS30044
+------------------------------------------
+*/
 #include "disk.h"
 #include "sfs.h"
 #include <stdio.h>
