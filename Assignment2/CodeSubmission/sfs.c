@@ -4,7 +4,7 @@
 
 #define MOUNTED 1
 #define UNMOUNTED 0
-
+// uint32_t MAXFILESIZE = 1029 * BLOCKSIZE;
 typedef unsigned char* bitmap_t;
 
 int STATE = MOUNTED;
@@ -356,7 +356,7 @@ int remove_file(int inumber) {
 	unset_bitmap(mem_bitmap.bitmap_inode, inumber);
 
 	/* Unset Data Bitmap */
-	if(node->size > 0){
+	if (node->size > 0) {
 		int start_idx = node->size / BLOCKSIZE;
 		if (node->size < 5 * BLOCKSIZE) {
 			for (; start_idx < 5; start_idx++) {
@@ -370,7 +370,7 @@ int remove_file(int inumber) {
 		read_block(mem_diskptr, node->indirect, indirect);
 		int* ptr = indirect;
 		ptr += start_idx;
-		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
 			unset_bitmap(mem_bitmap.bitmap_data, *ptr);
 		}
 
@@ -464,7 +464,7 @@ int read_i(int inumber, char *data, int length, int offset) {
 	memcpy(&sb, temp_block, sizeof(super_block));
 
 	//validating inode number
-	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0 || offset > 1029*BLOCKSIZE){
+	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0 || offset > 1029 * BLOCKSIZE) {
 		printf("[ERROR] __Read_i failed__\n [ERROR] __Invalid Arguments__\n\n");
 		return -1;
 	}
@@ -527,7 +527,7 @@ int read_i(int inumber, char *data, int length, int offset) {
 		read_block(mem_diskptr, node->indirect, indirect);
 		int* ptr = indirect;
 		ptr += start_idx;
-		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
 			bytes_toread = BLOCKSIZE - block_offset;
 			if (length < bytes_toread) {
 				bytes_toread = length;
@@ -552,7 +552,7 @@ int* get_empty_blocks(int req_num_blocks) {
 	int* block_ids = malloc(req_num_blocks * sizeof(int));
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
 		printf("@get_empty_blocks reading super_block ERROR\n");
-		return -1; //error in read
+		return NULL; //error in read
 	}
 	super_block sb;
 	memcpy(&sb, temp_block, sizeof(super_block));
@@ -574,7 +574,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 	super_block sb;
 	memcpy(&sb, temp_block, sizeof(super_block));
 	//validating inode number
-	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0) {
+	if (inumber < 0 || inumber >= sb.inodes || length < 0 || offset < 0 || offset > 1029 * BLOCKSIZE) {
 		return -1;
 	}
 	//validating inode
@@ -588,7 +588,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 		printf("[ERROR] @write_i file doesn't contain requested amount of data\n");
 		return -1;
 	}
-	length = min(length, MAXFILESIZE - offset);
+	length = min(length, 1029 * BLOCKSIZE - offset);
 	if (node->size - offset < length) { // requested length is greater than data present after offset
 		// length = node->size - offset;
 		/*Need to extend file size*/
@@ -614,7 +614,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 			int offset_indirect = ceil(max(node->size - 5 * BLOCKSIZE, 0) / sizeof(uint32_t));
 			read_block(mem_diskptr, node->indirect, temp_block);
 			int* ptr = temp_block;
-			for (; ptr < temp_block + BLOCKSIZE && i < req_num_blocks; i++) {
+			for (; (void*)ptr < temp_block + BLOCKSIZE && i < req_num_blocks; i++) {
 				*ptr = block_ids[i];
 				ptr++;
 			}
@@ -647,7 +647,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 	if (length > 0) {
 		read_block(mem_diskptr, node->indirect, indirect);
 		int* ptr = indirect + start_idx, bytes_toread;
-		for (; ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
+		for (; (void*)ptr < indirect + (node->size - 5 * BLOCKSIZE); ptr++) {
 			bytes_toread = BLOCKSIZE - block_offset;
 			if (length < BLOCKSIZE) {
 				bytes_toread = length;
@@ -671,7 +671,7 @@ int write_i(int inumber, char *data, int length, int offset) {
 }
 
 
-int create_dir(char *dirpath){
+int create_dir(char *dirpath) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
 		printf("[ERROR] __Create Directory failed__\n [ERROR] __Disk unmounted__\n\n");
 		return -1;
@@ -697,12 +697,12 @@ int create_dir(char *dirpath){
 
 	char *token;
 	token = strtok(dirpath, "/");
-	if(token == NULL){
+	if (token == NULL) {
 		printf("[ERROR] __Create Directory failed__\n [ERROR] __Unknown error occurred__\n\n");
 		return -1;
 	}
-	while(token != NULL){
-		
+	while (token != NULL) {
+
 		token = strtok(NULL, "/");
 	}
 
