@@ -247,18 +247,18 @@ int create_file() {
 	if (node == NULL) {
 		printf("[ERROR] __Create File failed__\n [ERROR] __Unknown Error occured__\n\n");
 		return -1;
-	}	int iblock = ceil(inumber / 8), inum_in_block = inumber & 7;
+	}
 
-	inode *node = NULL;
+	node = NULL;
+	int iblock = ceil(free_inode_pos / 8), inum_in_block = free_inode_pos & 7;
 	// bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
-	if (get_bitmap(mem_bitmap.bitmap_inode, inumber))
-		node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
-	return node;
+	if (get_bitmap(mem_bitmap.bitmap_inode, free_inode_pos))
+		node = (inode*)(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE);
+	// return node;
 	node->size = 0;
 	node->valid = 1;
 	set_bitmap(mem_bitmap.bitmap_inode, free_inode_pos);
 
-	int iblock = ceil(free_inode_pos / 8), inum_in_block = free_inode_pos & 7;
 	// memcpy(mem_diskptr->block_arr[iblock + sb.inode_block_idx] + inum_in_block * BLOCKSIZE, node, sizeof(*node));
 
 
@@ -375,10 +375,10 @@ int stat(int inumer) {
 	uint32_t num_data_blocks = (num_indirect_pointers == 0) ? num_direct_pointers : num_direct_pointers + num_indirect_pointers + 1;
 
 	printf("[SUCCESS] __Inode Information fetched successfully__\n");
-	printf("Logical Size: %ld\n", size);
-	printf("Number of Data Blocks in Use: %ld\n", num_data_blocks);
-	printf("Number of direct pointers: %ld", num_direct_pointers);
-	printf("Number of indirect pointers: %ld", num_indirect_pointers);
+	printf("Logical Size: %d\n", size);
+	printf("Number of Data Blocks in Use: %d\n", num_data_blocks);
+	printf("Number of direct pointers: %d", num_direct_pointers);
+	printf("Number of indirect pointers: %d", num_indirect_pointers);
 
 	return 0;
 }
@@ -390,9 +390,14 @@ char* retrieve_data_block(super_block* sb, int block_idx) {
 
 
 int read_i(int inumber, char *data, int length, int offset) {
-	super_block *sb = mem_diskptr;
+	if (read_block(mem_diskptr, 0, temp_block) < 0) {
+		printf("@read_i reading super_block ERROR\n");
+		return -1; //error in read
+	}
+	super_block sb;
+	memcpy(&sb, temp_block, sizeof(super_block));
 	//validating inode number
-	if (inumber < 0 || inumber >= sb->inodes) {
+	if (inumber < 0 || inumber >= sb.inodes) {
 		return -1;
 	}
 	//validating length
@@ -419,13 +424,8 @@ int read_i(int inumber, char *data, int length, int offset) {
 	    length -= toread
 	*/
 
-	if (read_block(mem_diskptr, 0, temp_block) < 0) {
-		printf("@read_i reading super_block ERROR\n");
-		return -1; //error in read
-	}
-	super_block sb;
-	memcpy(&sb, temp_block, sizeof(super_block));
-	mem_bitmap = {sb.};
+
+	// mem_bitmap = {sb.};
 }
 
 
