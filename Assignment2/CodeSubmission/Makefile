@@ -1,5 +1,5 @@
 main: main.o disk.o sfs.o
-	gcc -o main main.o disk.o sfs.o 
+	gcc -o main main.o disk.o sfs.o -lm
 main.o: main.c disk.h sfs.h
 	gcc -c -g main.c
 sfs.o: sfs.c sfs.h
