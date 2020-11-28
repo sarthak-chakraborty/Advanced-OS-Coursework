@@ -1,4 +1,4 @@
-/*Assignment 1
+/*Assignment 2
 ------------------------------------------
 Sankalp R. 16CS30031
 Sarthak Charkraborty 16CS30044
@@ -9,7 +9,7 @@ Sarthak Charkraborty 16CS30044
 
 #define MOUNTED 1
 #define UNMOUNTED 0
-// uint32_t MAXFILESIZE = 1029 * BLOCKSIZE;
+
 typedef unsigned char* bitmap_t;
 
 int STATE = MOUNTED;
@@ -48,13 +48,12 @@ inode* retrieve_inode(super_block* sb, int inumber) {
 	int iblock = floor((inumber) / (BLOCKSIZE / 8)), offset = (inumber) % (BLOCKSIZE / 8);
 
 	inode *node = (inode*)malloc(sizeof(inode));
-	// bitmap_t bitmap = mem_diskptr->block_arr[sb->inode_bitmap_block_idx];
-	// if (get_bitmap(mem_bitmap.bitmap_inode, inumber))
 	read_block(mem_diskptr, (iblock) + sb->inode_block_idx, temp_block);
-	// node = (inode*)(mem_diskptr->block_arr[iblock + sb->inode_block_idx] + inum_in_block * BLOCKSIZE);
 	memcpy(node, temp_block + offset * 8, sizeof(inode));
 	return node;
 }
+
+
 int write_inode(super_block* sb, int inumber, inode *node) {
 	int iblock = floor((inumber) / (BLOCKSIZE / 8)), offset = (inumber) % (BLOCKSIZE / 8);
 	read_block(mem_diskptr, iblock, temp_block);
@@ -66,6 +65,7 @@ int write_inode(super_block* sb, int inumber, inode *node) {
 	}
 	return 0;
 }
+
 
 int format(disk *diskptr) {
 	super_block sb;
@@ -499,10 +499,6 @@ int stat(int inumer) {
 }
 
 
-char* retrieve_data_block(super_block* sb, int block_idx) {
-
-}
-
 
 int read_i(int inumber, char *data, int length, int offset) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
@@ -565,7 +561,7 @@ int read_i(int inumber, char *data, int length, int offset) {
 		    update the offset by offset += toread
 		    length -= toread
 	*/
-	// mem_bitmap = {sb.};
+
 	printf("Inode_size:%d, inode->valid:%d, inode->direct[0]:%d, inode->direct[1]:%d\n",
 	       node->size, node->valid, node->direct[0], node->direct[1]);
 	int start_idx = offset / BLOCKSIZE, block_offset = offset % BLOCKSIZE, bytes_toread;
@@ -620,6 +616,8 @@ int read_i(int inumber, char *data, int length, int offset) {
 	free(node);
 	return total_data_read;
 }
+
+
 int* get_empty_blocks(int req_num_blocks) {
 	int* block_ids = malloc(req_num_blocks * sizeof(int));
 	if (read_block(mem_diskptr, 0, temp_block) < 0) {
@@ -639,6 +637,7 @@ int* get_empty_blocks(int req_num_blocks) {
 	}
 	return block_ids;
 }
+
 
 int write_i(int inumber, char *data, int length, int offset) {
 	if (mem_diskptr == NULL || STATE == UNMOUNTED) {
