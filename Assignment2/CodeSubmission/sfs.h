@@ -1,7 +1,17 @@
+/*Assignment 1
+------------------------------------------
+Sankalp R. 16CS30031
+Sarthak Charkraborty 16CS30044
+------------------------------------------
+*/
+#ifndef SFS_H
+#define SFS_H
 #include<stdint.h>
-
+#include<math.h>
+#include <stdio.h>
+#include<stdlib.h>
+#include "disk.h"
 const static uint32_t MAGIC = 12345;
-
 
 typedef struct inode {
 	uint32_t valid; // 0 if invalid
@@ -26,6 +36,14 @@ typedef struct super_block {
 } super_block;
 
 
+typedef struct dir_block {
+	uint32_t valid;
+	uint32_t type;
+	char* file_name;
+	uint32_t length;
+	uint32_t inumber;
+} dir_block;
+
 int format(disk *diskptr);
 
 int mount(disk *diskptr);
@@ -45,3 +63,4 @@ int read_file(char *filepath, char *data, int length, int offset);
 int write_file(char *filepath, char *data, int length, int offset);
 int create_dir(char *dirpath);
 int remove_dir(char *dirpath);
+#endif
